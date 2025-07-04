@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AuditLog;
 use App\Models\DCInstallation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -15,6 +16,17 @@ class HomeController extends Controller
 {
     public function index()
     {
+        // Audit anonymous page view
+        if (!Auth::check()) {
+            AuditLog::createEntry([
+                'action' => 'VIEW',
+                'resource_type' => 'System',
+                'resource_id' => 'homepage',
+                'severity' => 'low',
+                'description' => 'Anonymous user viewed homepage',
+            ]);
+        }
+
         // Get recent installations for display
         $installations = DCInstallation::latest()
             ->paginate(5);
@@ -137,6 +149,19 @@ class HomeController extends Controller
         ]);
 
         if ($validator->fails()) {
+            // Audit validation failure
+            AuditLog::createEntry([
+                'action' => 'CREATE_FAILED',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => 'validation_failed',
+                'severity' => 'low',
+                'description' => 'DC Installation creation failed due to validation errors',
+                'metadata' => [
+                    'errors' => $validator->errors()->toArray(),
+                    'input_data' => $request->only(['region_division', 'district', 'receiver_name']),
+                ],
+            ]);
+
             return back()
                 ->withErrors($validator)
                 ->withInput()
@@ -227,11 +252,26 @@ class HomeController extends Controller
                 'updated_by' => Auth::user()->name ?? 'System',
             ]);
 
+            // The audit log for creation is automatically handled by the Auditable trait
+
             return redirect()
                 ->back()
                 ->with('success', 'Installation record created successfully! SR No: ' . $installation->sr_no);
         } catch (\Exception $e) {
             Log::error('DC Installation creation error: ' . $e->getMessage());
+
+            // Audit creation failure
+            AuditLog::createEntry([
+                'action' => 'CREATE_FAILED',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => 'system_error',
+                'severity' => 'high',
+                'description' => 'DC Installation creation failed due to system error',
+                'metadata' => [
+                    'error' => $e->getMessage(),
+                    'input_data' => $request->only(['region_division', 'district', 'receiver_name']),
+                ],
+            ]);
 
             return back()
                 ->withInput()
@@ -255,6 +295,7 @@ class HomeController extends Controller
 
         // Create directory for this installation
         $installationDir = 'dc-installations/' . $installation->sr_no;
+        $uploadedFiles = [];
 
         foreach ($fileFields as $field) {
             if ($request->hasFile($field)) {
@@ -277,10 +318,25 @@ class HomeController extends Controller
 
                     // Update installation record with file path
                     $installation->update([$field => $filePath]);
+                    $uploadedFiles[] = $field;
                 } catch (\Exception $e) {
                     Log::error("File upload error for {$field}: " . $e->getMessage());
                 }
             }
+        }
+
+        // Audit file uploads
+        if (!empty($uploadedFiles)) {
+            AuditLog::createEntry([
+                'action' => 'UPLOAD',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => $installation->getAuditIdentifier(),
+                'severity' => 'low',
+                'description' => "Uploaded " . count($uploadedFiles) . " files for DC Installation #{$installation->getAuditIdentifier()}",
+                'metadata' => [
+                    'uploaded_files' => $uploadedFiles,
+                ],
+            ]);
         }
     }
 
@@ -334,11 +390,32 @@ class HomeController extends Controller
         if (!$user || (!in_array($user->user_type, ['Admin', 'Client']) && $installation->created_by !== $user->name)) {
             // For guests or unauthorized users, redirect to login
             if (!$user) {
+                // Audit unauthorized access attempt
+                AuditLog::createEntry([
+                    'action' => 'VIEW_UNAUTHORIZED',
+                    'resource_type' => 'DCInstallation',
+                    'resource_id' => $installation->getAuditIdentifier(),
+                    'severity' => 'medium',
+                    'description' => "Unauthorized access attempt to DC Installation #{$installation->getAuditIdentifier()}",
+                ]);
+
                 return redirect()->route('login')->with('message', 'Please login to view installation details.');
             }
 
+            // Audit forbidden access attempt
+            AuditLog::createEntry([
+                'action' => 'VIEW_FORBIDDEN',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => $installation->getAuditIdentifier(),
+                'severity' => 'medium',
+                'description' => "Forbidden access attempt to DC Installation #{$installation->getAuditIdentifier()} by user: {$user->name}",
+            ]);
+
             abort(403, 'You do not have permission to view this installation.');
         }
+
+        // Audit the view action (automatically handled by the model's auditView method)
+        $installation->auditView();
 
         return Inertia::render('DCInstallation/Show', [
             'installation' => $installation,
@@ -352,6 +429,15 @@ class HomeController extends Controller
         // Check permissions
         $user = Auth::user();
         if (!$user || !in_array($user->user_type, ['Admin', 'Client'])) {
+            // Audit unauthorized update attempt
+            AuditLog::createEntry([
+                'action' => 'UPDATE_UNAUTHORIZED',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => $installation->getAuditIdentifier(),
+                'severity' => 'high',
+                'description' => "Unauthorized update attempt to DC Installation #{$installation->getAuditIdentifier()}",
+            ]);
+
             abort(403, 'You do not have permission to update installations.');
         }
 
@@ -405,6 +491,18 @@ class HomeController extends Controller
         ]);
 
         if ($validator->fails()) {
+            // Audit validation failure for update
+            AuditLog::createEntry([
+                'action' => 'UPDATE_FAILED',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => $installation->getAuditIdentifier(),
+                'severity' => 'low',
+                'description' => "DC Installation update failed due to validation errors for #{$installation->getAuditIdentifier()}",
+                'metadata' => [
+                    'errors' => $validator->errors()->toArray(),
+                ],
+            ]);
+
             return back()
                 ->withErrors($validator)
                 ->withInput()
@@ -482,7 +580,7 @@ class HomeController extends Controller
             // Update tracking field
             $data['updated_by'] = $user->name;
 
-            // Update the installation record
+            // Update the installation record (audit log automatically handled by Auditable trait)
             $installation->update($data);
 
             return redirect()
@@ -490,6 +588,18 @@ class HomeController extends Controller
                 ->with('success', 'Installation record updated successfully!');
         } catch (\Exception $e) {
             Log::error('DC Installation update error: ' . $e->getMessage());
+
+            // Audit update failure
+            AuditLog::createEntry([
+                'action' => 'UPDATE_FAILED',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => $installation->getAuditIdentifier(),
+                'severity' => 'high',
+                'description' => "DC Installation update failed due to system error for #{$installation->getAuditIdentifier()}",
+                'metadata' => [
+                    'error' => $e->getMessage(),
+                ],
+            ]);
 
             return back()
                 ->withInput()
@@ -502,6 +612,15 @@ class HomeController extends Controller
         // Only admins can delete
         $user = Auth::user();
         if (!$user || $user->user_type !== 'Admin') {
+            // Audit unauthorized delete attempt
+            AuditLog::createEntry([
+                'action' => 'DELETE_UNAUTHORIZED',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => $installation->getAuditIdentifier(),
+                'severity' => 'high',
+                'description' => "Unauthorized delete attempt for DC Installation #{$installation->getAuditIdentifier()}",
+            ]);
+
             abort(403, 'You do not have permission to delete installations.');
         }
 
@@ -509,7 +628,7 @@ class HomeController extends Controller
             // Delete associated files before deleting the record
             $installation->deleteAllFiles();
 
-            // Soft delete the installation record
+            // Soft delete the installation record (audit log automatically handled by Auditable trait)
             $installation->delete();
 
             return redirect()
@@ -517,6 +636,18 @@ class HomeController extends Controller
                 ->with('success', 'Installation record deleted successfully!');
         } catch (\Exception $e) {
             Log::error('DC Installation deletion error: ' . $e->getMessage());
+
+            // Audit deletion failure
+            AuditLog::createEntry([
+                'action' => 'DELETE_FAILED',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => $installation->getAuditIdentifier(),
+                'severity' => 'high',
+                'description' => "DC Installation deletion failed due to system error for #{$installation->getAuditIdentifier()}",
+                'metadata' => [
+                    'error' => $e->getMessage(),
+                ],
+            ]);
 
             return back()
                 ->with('error', 'An error occurred while deleting the installation record. Please try again.');
@@ -538,115 +669,53 @@ class HomeController extends Controller
         ];
 
         if (!in_array($fileType, $allowedTypes)) {
+            // Audit invalid file type access
+            AuditLog::createEntry([
+                'action' => 'DOWNLOAD_INVALID',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => $installation->getAuditIdentifier(),
+                'severity' => 'medium',
+                'description' => "Invalid file type download attempt: {$fileType} for DC Installation #{$installation->getAuditIdentifier()}",
+            ]);
+
             abort(404, 'File type not allowed');
         }
 
         $filePath = $installation->$fileType;
 
         if (!$filePath || !Storage::disk('public')->exists($filePath)) {
+            // Audit file not found
+            AuditLog::createEntry([
+                'action' => 'DOWNLOAD_NOT_FOUND',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => $installation->getAuditIdentifier(),
+                'severity' => 'low',
+                'description' => "File not found for download: {$fileType} for DC Installation #{$installation->getAuditIdentifier()}",
+            ]);
+
             abort(404, 'File not found');
         }
+
+        // Audit the download action
+        $installation->auditFileDownload($fileType, basename($filePath));
 
         return Storage::disk('public')->download($filePath);
     }
 
-    public function dashboard()
-    {
-        // Check if user is authenticated
-        if (!Auth::check()) {
-            return redirect()->route('login');
-        }
-
-        $user = Auth::user();
-
-        // Only allow admin access to admin dashboard
-        if ($user->user_type !== 'Admin') {
-            return redirect()->route('dashboard');
-        }
-
-        $installations = DCInstallation::with([])
-            ->latest()
-            ->paginate(15);
-
-        $stats = [
-            'total' => DCInstallation::count(),
-            'delivered' => DCInstallation::where('delivery_status', 'Delivered')->count(),
-            'installed' => DCInstallation::where('installation_status', 'Installed')->count(),
-            'pending_delivery' => DCInstallation::where('delivery_status', 'Pending')->count(),
-            'pending_installation' => DCInstallation::where('installation_status', 'Pending')->count(),
-            'in_progress' => DCInstallation::where('installation_status', 'In Progress')->count(),
-            'overdue' => DCInstallation::where('installation_status', 'Pending')
-                ->where('delivery_date', '<=', now()->subDays(7))
-                ->count(),
-            'high_priority' => DCInstallation::where('priority', 'High')->count(),
-            'this_week' => DCInstallation::where('created_at', '>=', now()->subWeek())->count(),
-            'this_month' => DCInstallation::where('created_at', '>=', now()->subMonth())->count(),
-            'completion_rate' => DCInstallation::count() > 0
-                ? round((DCInstallation::where('installation_status', 'Installed')->count() / DCInstallation::count()) * 100, 2)
-                : 0,
-        ];
-
-        // Add user stats if you have a User model
-        try {
-            if (class_exists('App\Models\User')) {
-                $stats['total_users'] = \App\Models\User::count();
-                $stats['active_users'] = \App\Models\User::where('is_active', true)->count();
-                $stats['admin_users'] = \App\Models\User::where('user_type', 'Admin')->count();
-                $stats['client_users'] = \App\Models\User::where('user_type', 'Client')->count();
-            }
-        } catch (\Exception $e) {
-            Log::info('User model not available for stats');
-        }
-
-        $recentInstallations = DCInstallation::latest()
-            ->limit(10)
-            ->get();
-
-        // Get overdue installations
-        $overdueInstallations = DCInstallation::where('installation_status', 'Pending')
-            ->where('delivery_date', '<=', now()->subDays(7))
-            ->latest()
-            ->limit(5)
-            ->get();
-
-        // Get high priority installations
-        $highPriorityInstallations = DCInstallation::where('priority', 'High')
-            ->where('installation_status', '!=', 'Installed')
-            ->latest()
-            ->limit(5)
-            ->get();
-
-        // Status distribution
-        $statusDistribution = [
-            'completed' => DCInstallation::where('installation_status', 'Installed')->count(),
-            'pending' => DCInstallation::where('installation_status', 'Pending')->count(),
-            'in_progress' => DCInstallation::where('installation_status', 'In Progress')->count(),
-        ];
-
-        // Regional distribution
-        $regionDistribution = DCInstallation::select('region_division')
-            ->selectRaw('count(*) as count')
-            ->whereNotNull('region_division')
-            ->groupBy('region_division')
-            ->pluck('count', 'region_division')
-            ->toArray();
-
-        return Inertia::render('AdminDashboard', [
-            'stats' => $stats,
-            'recentInstallations' => $recentInstallations,
-            'overdueInstallations' => $overdueInstallations,
-            'highPriorityInstallations' => $highPriorityInstallations,
-            'statusDistribution' => $statusDistribution,
-            'regionDistribution' => $regionDistribution,
-        ]);
-    }
-
-    // Generate shareable link for clients
     public function generateShareableLink(DCInstallation $installation)
     {
         // Only admins and clients can generate shareable links
         $user = Auth::user();
         if (!$user || !in_array($user->user_type, ['Admin', 'Client'])) {
+            // Audit unauthorized share link generation
+            AuditLog::createEntry([
+                'action' => 'SHARE_UNAUTHORIZED',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => $installation->getAuditIdentifier(),
+                'severity' => 'medium',
+                'description' => "Unauthorized shareable link generation attempt for DC Installation #{$installation->getAuditIdentifier()}",
+            ]);
+
             abort(403, 'You do not have permission to generate shareable links.');
         }
 
@@ -656,6 +725,9 @@ class HomeController extends Controller
         // Store the token in cache for 24 hours
         cache(["share_token:{$token}" => $installation->id], now()->addHours(24));
 
+        // Audit the share link generation
+        $installation->auditShareLinkGenerated();
+
         $shareableUrl = route('dc-installations.shared', ['token' => $token]);
 
         return response()->json([
@@ -664,18 +736,38 @@ class HomeController extends Controller
         ]);
     }
 
-    // View installation via shareable link
     public function viewShared($token)
     {
         $installationId = cache("share_token:{$token}");
 
         if (!$installationId) {
+            // Audit invalid/expired token access
+            AuditLog::createEntry([
+                'action' => 'SHARE_ACCESS_INVALID',
+                'resource_type' => 'System',
+                'resource_id' => 'shared_link',
+                'severity' => 'medium',
+                'description' => "Invalid or expired share link access attempt",
+                'metadata' => [
+                    'token' => substr($token, 0, 10) . '...', // Partial token for security
+                ],
+            ]);
+
             return redirect()->route('login')->with('error', 'Invalid or expired share link. Please login to access.');
         }
 
         $installation = DCInstallation::find($installationId);
 
         if (!$installation) {
+            // Audit installation not found
+            AuditLog::createEntry([
+                'action' => 'SHARE_ACCESS_NOT_FOUND',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => $installationId,
+                'severity' => 'medium',
+                'description' => "Shared link access to non-existent installation: {$installationId}",
+            ]);
+
             abort(404, 'Installation not found.');
         }
 
@@ -690,8 +782,26 @@ class HomeController extends Controller
 
         // Only allow clients and admins to view shared installations
         if (!in_array($user->user_type, ['Admin', 'Client'])) {
+            // Audit forbidden shared access
+            AuditLog::createEntry([
+                'action' => 'SHARE_ACCESS_FORBIDDEN',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => $installation->getAuditIdentifier(),
+                'severity' => 'medium',
+                'description' => "Forbidden shared link access to DC Installation #{$installation->getAuditIdentifier()} by user: {$user->name}",
+            ]);
+
             abort(403, 'You do not have permission to view this installation.');
         }
+
+        // Audit successful shared link access
+        AuditLog::createEntry([
+            'action' => 'SHARE_ACCESS',
+            'resource_type' => 'DCInstallation',
+            'resource_id' => $installation->getAuditIdentifier(),
+            'severity' => 'low',
+            'description' => "Shared link access to DC Installation #{$installation->getAuditIdentifier()} by user: {$user->name}",
+        ]);
 
         return Inertia::render('DCInstallation/Show', [
             'installation' => $installation,
@@ -751,6 +861,15 @@ class HomeController extends Controller
 
         $installations = $query->latest()->paginate(10);
 
+        // Audit API access
+        AuditLog::createEntry([
+            'action' => 'API_ACCESS',
+            'resource_type' => 'System',
+            'resource_id' => 'installations_by_status',
+            'severity' => 'low',
+            'description' => "API access to installations by status: {$status}",
+        ]);
+
         return response()->json($installations);
     }
 
@@ -774,6 +893,15 @@ class HomeController extends Controller
                 : 0,
         ];
 
+        // Audit stats access
+        AuditLog::createEntry([
+            'action' => 'API_ACCESS',
+            'resource_type' => 'System',
+            'resource_id' => 'stats',
+            'severity' => 'low',
+            'description' => 'API access to installation statistics',
+        ]);
+
         return response()->json($stats);
     }
 
@@ -782,7 +910,9 @@ class HomeController extends Controller
         $query = DCInstallation::query();
 
         // Apply filters if provided
+        $filters = [];
         if ($request->has('status') && $request->status !== 'all') {
+            $filters['status'] = $request->status;
             switch ($request->status) {
                 case 'completed':
                     $query->where('delivery_status', 'Delivered')
@@ -801,14 +931,29 @@ class HomeController extends Controller
         }
 
         if ($request->has('region') && $request->region) {
+            $filters['region'] = $request->region;
             $query->where('region_division', $request->region);
         }
 
         if ($request->has('district') && $request->district) {
+            $filters['district'] = $request->district;
             $query->where('district', $request->district);
         }
 
         $installations = $query->orderBy('created_at', 'desc')->get();
+
+        // Audit export action
+        AuditLog::createEntry([
+            'action' => 'EXPORT',
+            'resource_type' => 'DCInstallation',
+            'resource_id' => 'bulk_export',
+            'severity' => 'medium',
+            'description' => "Exported {$installations->count()} DC installations to CSV",
+            'metadata' => [
+                'filters' => $filters,
+                'export_count' => $installations->count(),
+            ],
+        ]);
 
         $filename = 'dc_installations_' . date('Y-m-d_H-i-s') . '.csv';
 
@@ -923,6 +1068,24 @@ class HomeController extends Controller
         }
 
         $installations = $query->latest()->paginate(10);
+
+        // Audit search action
+        AuditLog::createEntry([
+            'action' => 'SEARCH',
+            'resource_type' => 'DCInstallation',
+            'resource_id' => 'search_query',
+            'severity' => 'low',
+            'description' => "Searched installations with term: '{$searchTerm}'",
+            'metadata' => [
+                'search_term' => $searchTerm,
+                'filters' => [
+                    'status' => $status,
+                    'region' => $region,
+                    'district' => $district,
+                ],
+                'results_count' => $installations->total(),
+            ],
+        ]);
 
         return response()->json($installations);
     }

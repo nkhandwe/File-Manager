@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AuditLog;
 use App\Models\DCInstallation;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -10,15 +11,22 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use ZipArchive;
-use Illuminate\Support\Str;
 
 class AdminController extends Controller
 {
     public function dashboard()
     {
+        // Audit dashboard access
+        AuditLog::createEntry([
+            'action' => 'VIEW',
+            'resource_type' => 'System',
+            'resource_id' => 'admin_dashboard',
+            'severity' => 'low',
+            'description' => 'Admin dashboard accessed',
+        ]);
+
         $stats = [
             'total_installations' => DCInstallation::count(),
             'completed' => DCInstallation::where('installation_status', 'Installed')->count(),
@@ -37,12 +45,10 @@ class AdminController extends Controller
         ];
 
         $recentInstallations = DCInstallation::latest()->limit(10)->get();
-
         $overdueInstallations = DCInstallation::where('installation_status', 'Pending')
             ->where('delivery_date', '<=', now()->subDays(7))
             ->limit(5)
             ->get();
-
         $highPriorityInstallations = DCInstallation::where('priority', 'High')
             ->where('installation_status', '!=', 'Installed')
             ->limit(5)
@@ -71,9 +77,21 @@ class AdminController extends Controller
         ]);
     }
 
-    // Installation Management
+    // Installation Management with Audit
     public function installations(Request $request)
     {
+        // Audit installations list access
+        AuditLog::createEntry([
+            'action' => 'VIEW',
+            'resource_type' => 'System',
+            'resource_id' => 'admin_installations_list',
+            'severity' => 'low',
+            'description' => 'Admin installations list accessed',
+            'metadata' => [
+                'filters' => $request->only(['status', 'region', 'district', 'priority', 'search']),
+            ],
+        ]);
+
         $query = DCInstallation::query();
 
         // Apply filters
@@ -130,17 +148,6 @@ class AdminController extends Controller
         ]);
     }
 
-    public function createInstallation()
-    {
-        $regions = ['Amravati', 'Nashik', 'Pune', 'Mumbai', 'Nagpur', 'Aurangabad'];
-        $districts = ['Pune', 'Mumbai', 'Nashik', 'Nagpur', 'Aurangabad', 'Solapur'];
-
-        return Inertia::render('Admin/CreateInstallation', [
-            'regions' => $regions,
-            'districts' => $districts,
-        ]);
-    }
-
     public function storeInstallation(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -158,6 +165,18 @@ class AdminController extends Controller
         ]);
 
         if ($validator->fails()) {
+            // Audit validation failure
+            AuditLog::createEntry([
+                'action' => 'CREATE_FAILED',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => 'admin_validation_failed',
+                'severity' => 'low',
+                'description' => 'Admin installation creation failed due to validation errors',
+                'metadata' => [
+                    'errors' => $validator->errors()->toArray(),
+                ],
+            ]);
+
             return back()->withErrors($validator)->withInput();
         }
 
@@ -166,27 +185,38 @@ class AdminController extends Controller
             $data['created_by'] = Auth::user()->name;
             $data['updated_by'] = Auth::user()->name;
 
-            DCInstallation::create($data);
+            $installation = DCInstallation::create($data);
+
+            // Manual audit for admin-created installation
+            AuditLog::createEntry([
+                'action' => 'CREATE',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => $installation->getAuditIdentifier(),
+                'severity' => 'medium',
+                'description' => "Admin created DC Installation #{$installation->getAuditIdentifier()}",
+                'new_values' => $installation->only(['region_division', 'district', 'receiver_name', 'priority']),
+            ]);
 
             return redirect()->route('admin.installations')
                 ->with('success', 'Installation record created successfully!');
         } catch (\Exception $e) {
             Log::error('Admin installation creation error: ' . $e->getMessage());
+
+            // Audit creation failure
+            AuditLog::createEntry([
+                'action' => 'CREATE_FAILED',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => 'admin_system_error',
+                'severity' => 'high',
+                'description' => 'Admin installation creation failed due to system error',
+                'metadata' => [
+                    'error' => $e->getMessage(),
+                ],
+            ]);
+
             return back()->withInput()
                 ->with('error', 'An error occurred while creating the installation record.');
         }
-    }
-
-    public function editInstallation(DCInstallation $installation)
-    {
-        $regions = ['Amravati', 'Nashik', 'Pune', 'Mumbai', 'Nagpur', 'Aurangabad'];
-        $districts = ['Pune', 'Mumbai', 'Nashik', 'Nagpur', 'Aurangabad', 'Solapur'];
-
-        return Inertia::render('Admin/EditInstallation', [
-            'installation' => $installation,
-            'regions' => $regions,
-            'districts' => $districts,
-        ]);
     }
 
     public function updateInstallation(Request $request, DCInstallation $installation)
@@ -206,10 +236,25 @@ class AdminController extends Controller
         }
 
         try {
+            $oldData = $installation->only(['region_division', 'district', 'receiver_name', 'priority', 'installation_status']);
+
             $data = $request->all();
             $data['updated_by'] = Auth::user()->name;
 
             $installation->update($data);
+
+            $newData = $installation->only(['region_division', 'district', 'receiver_name', 'priority', 'installation_status']);
+
+            // Manual audit for admin update
+            AuditLog::createEntry([
+                'action' => 'UPDATE',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => $installation->getAuditIdentifier(),
+                'severity' => 'medium',
+                'description' => "Admin updated DC Installation #{$installation->getAuditIdentifier()}",
+                'old_values' => $oldData,
+                'new_values' => $newData,
+            ]);
 
             return redirect()->route('admin.installations')
                 ->with('success', 'Installation record updated successfully!');
@@ -223,23 +268,62 @@ class AdminController extends Controller
     public function deleteInstallation(DCInstallation $installation)
     {
         try {
+            // Store data for audit before deletion
+            $installationData = $installation->only(['sr_no', 'region_division', 'district', 'receiver_name']);
+
             // Delete associated files if method exists
             if (method_exists($installation, 'deleteAllFiles')) {
                 $installation->deleteAllFiles();
             }
+
             $installation->delete();
+
+            // Manual audit for admin deletion
+            AuditLog::createEntry([
+                'action' => 'DELETE',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => $installationData['sr_no'],
+                'severity' => 'high',
+                'description' => "Admin deleted DC Installation #{$installationData['sr_no']}",
+                'old_values' => $installationData,
+            ]);
 
             return redirect()->route('admin.installations')
                 ->with('success', 'Installation record deleted successfully!');
         } catch (\Exception $e) {
             Log::error('Admin installation deletion error: ' . $e->getMessage());
+
+            // Audit deletion failure
+            AuditLog::createEntry([
+                'action' => 'DELETE_FAILED',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => $installation->getAuditIdentifier(),
+                'severity' => 'high',
+                'description' => "Admin installation deletion failed for #{$installation->getAuditIdentifier()}",
+                'metadata' => [
+                    'error' => $e->getMessage(),
+                ],
+            ]);
+
             return back()->with('error', 'An error occurred while deleting the installation record.');
         }
     }
 
-    // User Management
+    // User Management with Audit
     public function users(Request $request)
     {
+        // Audit user management access
+        AuditLog::createEntry([
+            'action' => 'VIEW',
+            'resource_type' => 'System',
+            'resource_id' => 'admin_users_list',
+            'severity' => 'medium',
+            'description' => 'Admin accessed user management',
+            'metadata' => [
+                'filters' => $request->only(['type', 'status', 'search']),
+            ],
+        ]);
+
         $query = User::query();
 
         if ($request->filled('type')) {
@@ -270,11 +354,6 @@ class AdminController extends Controller
         ]);
     }
 
-    public function createUser()
-    {
-        return Inertia::render('Admin/CreateUser');
-    }
-
     public function storeUser(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -286,32 +365,64 @@ class AdminController extends Controller
         ]);
 
         if ($validator->fails()) {
+            // Audit user creation validation failure
+            AuditLog::createEntry([
+                'action' => 'CREATE_FAILED',
+                'resource_type' => 'User',
+                'resource_id' => 'validation_failed',
+                'severity' => 'medium',
+                'description' => 'Admin user creation failed due to validation errors',
+                'metadata' => [
+                    'errors' => $validator->errors()->toArray(),
+                    'attempted_email' => $request->email,
+                ],
+            ]);
+
             return back()->withErrors($validator)->withInput();
         }
 
         try {
-            User::create([
+            $userData = [
                 'name' => $request->name,
                 'email' => $request->email,
                 'password' => Hash::make($request->password),
                 'user_type' => $request->user_type,
                 'is_active' => $request->boolean('is_active', true),
+            ];
+
+            $user = User::create($userData);
+
+            // Manual audit for admin user creation
+            AuditLog::createEntry([
+                'action' => 'CREATE',
+                'resource_type' => 'User',
+                'resource_id' => $user->id,
+                'severity' => 'high',
+                'description' => "Admin created user: {$user->name} ({$user->email})",
+                'new_values' => $user->only(['name', 'email', 'user_type', 'is_active']),
             ]);
 
             return redirect()->route('admin.users')
                 ->with('success', 'User created successfully!');
         } catch (\Exception $e) {
             Log::error('User creation error: ' . $e->getMessage());
+
+            // Audit user creation failure
+            AuditLog::createEntry([
+                'action' => 'CREATE_FAILED',
+                'resource_type' => 'User',
+                'resource_id' => 'system_error',
+                'severity' => 'high',
+                'description' => 'Admin user creation failed due to system error',
+                'metadata' => [
+                    'error' => $e->getMessage(),
+                    'attempted_email' => $request->email,
+                ],
+            ]);
+
             return back()->withInput()
                 ->with('error', 'An error occurred while creating the user.');
         }
-    }
-
-    public function editUser(User $user)
-    {
-        return Inertia::render('Admin/EditUser', [
-            'user' => $user,
-        ]);
     }
 
     public function updateUser(Request $request, User $user)
@@ -329,6 +440,8 @@ class AdminController extends Controller
         }
 
         try {
+            $oldData = $user->only(['name', 'email', 'user_type', 'is_active']);
+
             $data = [
                 'name' => $request->name,
                 'email' => $request->email,
@@ -338,9 +451,35 @@ class AdminController extends Controller
 
             if ($request->filled('password')) {
                 $data['password'] = Hash::make($request->password);
+
+                // Audit password change
+                AuditLog::createEntry([
+                    'action' => 'PASSWORD_CHANGED',
+                    'resource_type' => 'User',
+                    'resource_id' => $user->id,
+                    'severity' => 'high',
+                    'description' => "Admin changed password for user: {$user->name}",
+                ]);
             }
 
             $user->update($data);
+            $newData = $user->only(['name', 'email', 'user_type', 'is_active']);
+
+            // Check for role changes
+            if ($oldData['user_type'] !== $newData['user_type']) {
+                $user->auditRoleChange($oldData['user_type'], $newData['user_type']);
+            }
+
+            // Manual audit for admin user update
+            AuditLog::createEntry([
+                'action' => 'UPDATE',
+                'resource_type' => 'User',
+                'resource_id' => $user->id,
+                'severity' => 'high',
+                'description' => "Admin updated user: {$user->name}",
+                'old_values' => $oldData,
+                'new_values' => $newData,
+            ]);
 
             return redirect()->route('admin.users')
                 ->with('success', 'User updated successfully!');
@@ -355,15 +494,50 @@ class AdminController extends Controller
     {
         try {
             if ($user->id === Auth::id()) {
+                // Audit self-deletion attempt
+                AuditLog::createEntry([
+                    'action' => 'DELETE_FAILED',
+                    'resource_type' => 'User',
+                    'resource_id' => $user->id,
+                    'severity' => 'medium',
+                    'description' => "Admin attempted to delete own account: {$user->name}",
+                ]);
+
                 return back()->with('error', 'You cannot delete your own account.');
             }
 
+            // Store user data before deletion
+            $userData = $user->only(['name', 'email', 'user_type', 'is_active']);
+
             $user->delete();
+
+            // Manual audit for admin user deletion
+            AuditLog::createEntry([
+                'action' => 'DELETE',
+                'resource_type' => 'User',
+                'resource_id' => $user->id,
+                'severity' => 'critical',
+                'description' => "Admin deleted user: {$userData['name']} ({$userData['email']})",
+                'old_values' => $userData,
+            ]);
 
             return redirect()->route('admin.users')
                 ->with('success', 'User deleted successfully!');
         } catch (\Exception $e) {
             Log::error('User deletion error: ' . $e->getMessage());
+
+            // Audit user deletion failure
+            AuditLog::createEntry([
+                'action' => 'DELETE_FAILED',
+                'resource_type' => 'User',
+                'resource_id' => $user->id,
+                'severity' => 'high',
+                'description' => "Admin user deletion failed for: {$user->name}",
+                'metadata' => [
+                    'error' => $e->getMessage(),
+                ],
+            ]);
+
             return back()->with('error', 'An error occurred while deleting the user.');
         }
     }
@@ -372,10 +546,23 @@ class AdminController extends Controller
     {
         try {
             if ($user->id === Auth::id()) {
+                // Audit self-status change attempt
+                AuditLog::createEntry([
+                    'action' => 'STATUS_CHANGE_FAILED',
+                    'resource_type' => 'User',
+                    'resource_id' => $user->id,
+                    'severity' => 'medium',
+                    'description' => "Admin attempted to change own status: {$user->name}",
+                ]);
+
                 return back()->with('error', 'You cannot change your own status.');
             }
 
+            $oldStatus = $user->is_active;
             $user->update(['is_active' => !$user->is_active]);
+
+            // Audit status change
+            $user->auditStatusChange($oldStatus, $user->is_active);
 
             $status = $user->is_active ? 'activated' : 'deactivated';
             return back()->with('success', "User {$status} successfully!");
@@ -385,9 +572,18 @@ class AdminController extends Controller
         }
     }
 
-    // Reports and Analytics
+    // Reports and Analytics with Audit
     public function reports(Request $request)
     {
+        // Audit reports access
+        AuditLog::createEntry([
+            'action' => 'VIEW',
+            'resource_type' => 'System',
+            'resource_id' => 'admin_reports',
+            'severity' => 'medium',
+            'description' => 'Admin accessed reports and analytics',
+        ]);
+
         $stats = [
             'total' => DCInstallation::count(),
             'completed' => DCInstallation::where('installation_status', 'Installed')->count(),
@@ -454,7 +650,9 @@ class AdminController extends Controller
         $query = DCInstallation::query();
 
         // Apply filters
+        $filters = [];
         if ($request->filled('status')) {
+            $filters['status'] = $request->status;
             switch ($request->status) {
                 case 'completed':
                     $query->where('installation_status', 'Installed');
@@ -470,14 +668,29 @@ class AdminController extends Controller
         }
 
         if ($request->filled('region')) {
+            $filters['region'] = $request->region;
             $query->where('region_division', $request->region);
         }
 
         if ($request->filled('date_from') && $request->filled('date_to')) {
+            $filters['date_range'] = [$request->date_from, $request->date_to];
             $query->whereBetween('created_at', [$request->date_from, $request->date_to]);
         }
 
         $installations = $query->orderBy('created_at', 'desc')->get();
+
+        // Audit report export
+        AuditLog::createEntry([
+            'action' => 'EXPORT',
+            'resource_type' => 'System',
+            'resource_id' => 'admin_reports',
+            'severity' => 'medium',
+            'description' => "Admin exported reports with {$installations->count()} records",
+            'metadata' => [
+                'filters' => $filters,
+                'export_count' => $installations->count(),
+            ],
+        ]);
 
         $filename = 'admin_installations_report_' . date('Y-m-d_H-i-s') . '.csv';
 
@@ -543,6 +756,15 @@ class AdminController extends Controller
 
     public function analytics()
     {
+        // Audit analytics access
+        AuditLog::createEntry([
+            'action' => 'VIEW',
+            'resource_type' => 'System',
+            'resource_id' => 'admin_analytics',
+            'severity' => 'medium',
+            'description' => 'Admin accessed advanced analytics',
+        ]);
+
         $totalInstallations = DCInstallation::count();
         $completionRate = $totalInstallations > 0
             ? round((DCInstallation::where('installation_status', 'Installed')->count() / $totalInstallations) * 100, 2)
@@ -572,27 +794,253 @@ class AdminController extends Controller
         ]);
     }
 
-    // System Settings
+    // System Settings with Audit
     public function settings()
     {
+        // Audit settings access
+        AuditLog::createEntry([
+            'action' => 'VIEW',
+            'resource_type' => 'System',
+            'resource_id' => 'admin_settings',
+            'severity' => 'high',
+            'description' => 'Admin accessed system settings',
+        ]);
+
         return Inertia::render('Admin/Settings');
     }
 
     public function updateSettings(Request $request)
     {
-        // Implement settings update logic
-        return back()->with('success', 'Settings updated successfully!');
+        try {
+            // Store old settings (implement based on your settings system)
+            $oldSettings = [
+                // Your current settings
+            ];
+
+            // Update settings logic here
+            $newSettings = [
+                // Your new settings
+            ];
+
+            // Audit the settings change
+            AuditLog::createEntry([
+                'action' => 'UPDATE',
+                'resource_type' => 'System',
+                'resource_id' => 'settings',
+                'severity' => 'critical',
+                'description' => 'Admin updated system settings',
+                'old_values' => $oldSettings,
+                'new_values' => $newSettings,
+            ]);
+
+            return back()->with('success', 'Settings updated successfully!');
+        } catch (\Exception $e) {
+            Log::error('Settings update error: ' . $e->getMessage());
+
+            // Audit settings update failure
+            AuditLog::createEntry([
+                'action' => 'UPDATE_FAILED',
+                'resource_type' => 'System',
+                'resource_id' => 'settings',
+                'severity' => 'high',
+                'description' => 'Admin settings update failed',
+                'metadata' => [
+                    'error' => $e->getMessage(),
+                ],
+            ]);
+
+            return back()->with('error', 'An error occurred while updating settings.');
+        }
     }
 
-    // Logs and Audit
-    public function logs()
+    // Audit Trail Management
+    public function audit(Request $request)
     {
-        return Inertia::render('Admin/Logs');
+        // Audit audit trail access
+        AuditLog::createEntry([
+            'action' => 'VIEW',
+            'resource_type' => 'System',
+            'resource_id' => 'audit_trail',
+            'severity' => 'high',
+            'description' => 'Admin accessed audit trail',
+            'metadata' => [
+                'filters' => $request->only(['action', 'resource', 'severity', 'user', 'date_from', 'date_to', 'search']),
+            ],
+        ]);
+
+        $query = AuditLog::with('user');
+
+        // Apply filters
+        $query->byAction($request->input('action'))
+            ->byResource($request->input('resource'))
+            ->bySeverity($request->input('severity'))
+            ->byUser($request->input('user'))
+            ->byDateRange($request->input('date_from'), $request->input('date_to'))
+            ->search($request->input('search'));
+
+        // Order by latest first
+        $auditEntries = $query->latest()->paginate(25);
+
+        // Get all users for filter dropdown
+        $users = User::select('id', 'name', 'email')
+            ->orderBy('name')
+            ->get();
+
+        return Inertia::render('Admin/Audit', [
+            'auditEntries' => $auditEntries,
+            'filters' => $request->only(['action', 'resource', 'severity', 'user', 'date_from', 'date_to', 'search']),
+            'users' => $users,
+        ]);
     }
 
-    public function audit()
+    public function exportAudit(Request $request)
     {
-        return Inertia::render('Admin/Audit');
+        $query = AuditLog::with('user');
+
+        // Apply same filters as audit method
+        $filters = $request->only(['action', 'resource', 'severity', 'user', 'date_from', 'date_to', 'search']);
+
+        $query->byAction($request->input('action'))
+            ->byResource($request->input('resource'))
+            ->bySeverity($request->input('severity'))
+            ->byUser($request->input('user'))
+            ->byDateRange($request->input('date_from'), $request->input('date_to'))
+            ->search($request->input('search'));
+
+        $auditEntries = $query->latest()->get();
+
+        // Audit the audit export
+        AuditLog::createEntry([
+            'action' => 'EXPORT',
+            'resource_type' => 'System',
+            'resource_id' => 'audit_trail',
+            'severity' => 'critical',
+            'description' => "Admin exported audit trail with {$auditEntries->count()} entries",
+            'metadata' => [
+                'filters' => $filters,
+                'export_count' => $auditEntries->count(),
+            ],
+        ]);
+
+        $filename = 'audit_trail_' . date('Y-m-d_H-i-s') . '.csv';
+
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ];
+
+        $callback = function () use ($auditEntries) {
+            $file = fopen('php://output', 'w');
+
+            // CSV headers
+            fputcsv($file, [
+                'ID',
+                'Date/Time',
+                'User Name',
+                'User Email',
+                'User Type',
+                'Action',
+                'Resource Type',
+                'Resource ID',
+                'Description',
+                'Severity',
+                'IP Address',
+                'User Agent',
+                'URL',
+                'Method',
+                'Old Values',
+                'New Values',
+            ]);
+
+            // CSV data
+            foreach ($auditEntries as $entry) {
+                fputcsv($file, [
+                    $entry->id,
+                    $entry->created_at->format('Y-m-d H:i:s'),
+                    $entry->user_name,
+                    $entry->user_email,
+                    $entry->user_type,
+                    $entry->action,
+                    $entry->resource_type,
+                    $entry->resource_id,
+                    $entry->description,
+                    $entry->severity,
+                    $entry->ip_address,
+                    substr($entry->user_agent, 0, 100),
+                    $entry->url,
+                    $entry->method,
+                    $entry->old_values ? json_encode($entry->old_values) : '',
+                    $entry->new_values ? json_encode($entry->new_values) : '',
+                ]);
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    public function clearAuditLogs(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'days' => 'required|integer|min:30|max:365',
+        ]);
+
+        if ($validator->fails()) {
+            return back()->withErrors($validator);
+        }
+
+        try {
+            $days = $request->input('days', 90);
+            $deletedCount = AuditLog::where('created_at', '<', now()->subDays($days))->delete();
+
+            // Log this action
+            AuditLog::createEntry([
+                'action' => 'DELETE',
+                'resource_type' => 'System',
+                'resource_id' => 'audit_logs',
+                'severity' => 'critical',
+                'description' => "Admin cleared {$deletedCount} audit log entries older than {$days} days",
+                'metadata' => [
+                    'deleted_count' => $deletedCount,
+                    'days' => $days,
+                ],
+            ]);
+
+            return back()->with('success', "Successfully cleared {$deletedCount} old audit log entries.");
+        } catch (\Exception $e) {
+            Log::error('Audit log cleanup error: ' . $e->getMessage());
+            return back()->with('error', 'An error occurred while clearing audit logs.');
+        }
+    }
+
+    public function getAuditStats()
+    {
+        $stats = [
+            'total_entries' => AuditLog::count(),
+            'today_entries' => AuditLog::whereDate('created_at', today())->count(),
+            'week_entries' => AuditLog::where('created_at', '>=', now()->subWeek())->count(),
+            'month_entries' => AuditLog::where('created_at', '>=', now()->subMonth())->count(),
+            'critical_entries' => AuditLog::where('severity', 'critical')->count(),
+            'high_entries' => AuditLog::where('severity', 'high')->count(),
+            'actions_breakdown' => AuditLog::selectRaw('action, COUNT(*) as count')
+                ->groupBy('action')
+                ->pluck('count', 'action')
+                ->toArray(),
+            'resources_breakdown' => AuditLog::selectRaw('resource_type, COUNT(*) as count')
+                ->groupBy('resource_type')
+                ->pluck('count', 'resource_type')
+                ->toArray(),
+            'top_users' => AuditLog::selectRaw('user_name, COUNT(*) as count')
+                ->whereNotNull('user_name')
+                ->groupBy('user_name')
+                ->orderByDesc('count')
+                ->limit(10)
+                ->pluck('count', 'user_name')
+                ->toArray(),
+        ];
+
+        return response()->json($stats);
     }
 
     // Download all files for an installation as ZIP
@@ -639,6 +1087,9 @@ class AdminController extends Controller
                 $zip->close();
 
                 if ($fileCount > 0) {
+                    // Audit the bulk download action
+                    $installation->auditBulkDownload();
+
                     return response()->download($zipPath, $zipFileName)->deleteFileAfterSend(true);
                 } else {
                     // Clean up empty zip file
@@ -650,6 +1101,19 @@ class AdminController extends Controller
             return back()->with('error', 'Failed to create ZIP file.');
         } catch (\Exception $e) {
             Log::error('ZIP download error: ' . $e->getMessage());
+
+            // Audit ZIP download failure
+            AuditLog::createEntry([
+                'action' => 'DOWNLOAD_FAILED',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => $installation->getAuditIdentifier(),
+                'severity' => 'medium',
+                'description' => "Admin ZIP download failed for DC Installation #{$installation->getAuditIdentifier()}",
+                'metadata' => [
+                    'error' => $e->getMessage(),
+                ],
+            ]);
+
             return back()->with('error', 'An error occurred while creating the ZIP file.');
         }
     }

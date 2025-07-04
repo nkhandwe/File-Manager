@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AuditLog;
 use App\Models\DCInstallation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -14,6 +15,15 @@ class ClientController extends Controller
 {
     public function dashboard()
     {
+        // Audit client dashboard access
+        AuditLog::createEntry([
+            'action' => 'VIEW',
+            'resource_type' => 'System',
+            'resource_id' => 'client_dashboard',
+            'severity' => 'low',
+            'description' => 'Client dashboard accessed',
+        ]);
+
         $stats = [
             'total_installations' => DCInstallation::count(),
             'completed' => DCInstallation::completed()->count(),
@@ -51,6 +61,18 @@ class ClientController extends Controller
 
     public function installations(Request $request)
     {
+        // Audit client installations list access
+        AuditLog::createEntry([
+            'action' => 'VIEW',
+            'resource_type' => 'System',
+            'resource_id' => 'client_installations_list',
+            'severity' => 'low',
+            'description' => 'Client installations list accessed',
+            'metadata' => [
+                'filters' => $request->only(['status', 'region', 'district', 'priority', 'search']),
+            ],
+        ]);
+
         $query = DCInstallation::query();
 
         // Apply filters
@@ -108,6 +130,15 @@ class ClientController extends Controller
 
     public function reports(Request $request)
     {
+        // Audit client reports access
+        AuditLog::createEntry([
+            'action' => 'VIEW',
+            'resource_type' => 'System',
+            'resource_id' => 'client_reports',
+            'severity' => 'medium',
+            'description' => 'Client reports accessed',
+        ]);
+
         $stats = [
             'total' => DCInstallation::count(),
             'completed' => DCInstallation::completed()->count(),
@@ -146,6 +177,15 @@ class ClientController extends Controller
 
     public function profile()
     {
+        // Audit client profile access
+        AuditLog::createEntry([
+            'action' => 'VIEW',
+            'resource_type' => 'User',
+            'resource_id' => Auth::id(),
+            'severity' => 'low',
+            'description' => 'Client viewed own profile',
+        ]);
+
         $user = Auth::user();
 
         // Get user's activity stats if they created installations
@@ -163,7 +203,7 @@ class ClientController extends Controller
         ]);
     }
 
-    // Download individual file
+    // Download individual file with audit
     public function downloadFile(DCInstallation $installation, $fileType)
     {
         $allowedTypes = [
@@ -179,19 +219,40 @@ class ClientController extends Controller
         ];
 
         if (!in_array($fileType, $allowedTypes)) {
+            // Audit invalid file type access
+            AuditLog::createEntry([
+                'action' => 'DOWNLOAD_INVALID',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => $installation->getAuditIdentifier(),
+                'severity' => 'medium',
+                'description' => "Client invalid file type download attempt: {$fileType} for DC Installation #{$installation->getAuditIdentifier()}",
+            ]);
+
             abort(404, 'File type not allowed');
         }
 
         $filePath = $installation->$fileType;
 
         if (!$filePath || !Storage::disk('public')->exists($filePath)) {
+            // Audit file not found
+            AuditLog::createEntry([
+                'action' => 'DOWNLOAD_NOT_FOUND',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => $installation->getAuditIdentifier(),
+                'severity' => 'low',
+                'description' => "Client file not found for download: {$fileType} for DC Installation #{$installation->getAuditIdentifier()}",
+            ]);
+
             abort(404, 'File not found');
         }
+
+        // Audit the download action
+        $installation->auditFileDownload($fileType, basename($filePath));
 
         return Storage::disk('public')->download($filePath);
     }
 
-    // Download all files for an installation as ZIP
+    // Download all files for an installation as ZIP with audit
     public function downloadInstallationFiles(DCInstallation $installation)
     {
         try {
@@ -235,6 +296,9 @@ class ClientController extends Controller
                 $zip->close();
 
                 if ($fileCount > 0) {
+                    // Audit the bulk download action
+                    $installation->auditBulkDownload();
+
                     return response()->download($zipPath, $zipFileName)->deleteFileAfterSend(true);
                 } else {
                     // Clean up empty zip file
@@ -246,16 +310,38 @@ class ClientController extends Controller
             return back()->with('error', 'Failed to create ZIP file.');
         } catch (\Exception $e) {
             Log::error('Client ZIP download error: ' . $e->getMessage());
+
+            // Audit ZIP download failure
+            AuditLog::createEntry([
+                'action' => 'DOWNLOAD_FAILED',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => $installation->getAuditIdentifier(),
+                'severity' => 'medium',
+                'description' => "Client ZIP download failed for DC Installation #{$installation->getAuditIdentifier()}",
+                'metadata' => [
+                    'error' => $e->getMessage(),
+                ],
+            ]);
+
             return back()->with('error', 'An error occurred while creating the ZIP file.');
         }
     }
 
-    // Download all files for multiple installations as ZIP
+    // Download all files for multiple installations as ZIP with audit
     public function downloadBulkFiles(Request $request)
     {
         $installationIds = $request->input('installation_ids', []);
 
         if (empty($installationIds)) {
+            // Audit bulk download with no selections
+            AuditLog::createEntry([
+                'action' => 'DOWNLOAD_BULK_FAILED',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => 'no_selections',
+                'severity' => 'low',
+                'description' => 'Client bulk download failed - no installations selected',
+            ]);
+
             return back()->with('error', 'No installations selected.');
         }
 
@@ -263,6 +349,18 @@ class ClientController extends Controller
             $installations = DCInstallation::whereIn('id', $installationIds)->get();
 
             if ($installations->isEmpty()) {
+                // Audit bulk download with invalid selections
+                AuditLog::createEntry([
+                    'action' => 'DOWNLOAD_BULK_FAILED',
+                    'resource_type' => 'DCInstallation',
+                    'resource_id' => 'invalid_selections',
+                    'severity' => 'medium',
+                    'description' => 'Client bulk download failed - no valid installations found',
+                    'metadata' => [
+                        'requested_ids' => $installationIds,
+                    ],
+                ]);
+
                 return back()->with('error', 'No valid installations found.');
             }
 
@@ -289,9 +387,12 @@ class ClientController extends Controller
                 ];
 
                 $totalFiles = 0;
+                $installationSrNos = [];
+
                 foreach ($installations as $installation) {
                     $folderName = "DC_{$installation->sr_no}";
                     $zip->addEmptyDir($folderName);
+                    $installationSrNos[] = $installation->sr_no;
 
                     $installationFiles = 0;
                     foreach ($fileFields as $field => $label) {
@@ -309,6 +410,9 @@ class ClientController extends Controller
                         $summary = $this->generateInstallationSummary($installation);
                         $zip->addFromString("{$folderName}/Installation_Summary.txt", $summary);
                     }
+
+                    // Audit individual installation in bulk download
+                    $installation->auditBulkDownload();
                 }
 
                 // Add bulk summary
@@ -318,9 +422,36 @@ class ClientController extends Controller
                 $zip->close();
 
                 if ($totalFiles > 0) {
+                    // Audit successful bulk download
+                    AuditLog::createEntry([
+                        'action' => 'DOWNLOAD_BULK',
+                        'resource_type' => 'DCInstallation',
+                        'resource_id' => 'bulk_download',
+                        'severity' => 'medium',
+                        'description' => "Client bulk downloaded {$installations->count()} installations with {$totalFiles} files",
+                        'metadata' => [
+                            'installation_count' => $installations->count(),
+                            'file_count' => $totalFiles,
+                            'installation_sr_nos' => $installationSrNos,
+                        ],
+                    ]);
+
                     return response()->download($zipPath, $zipFileName)->deleteFileAfterSend(true);
                 } else {
                     unlink($zipPath);
+
+                    // Audit bulk download with no files
+                    AuditLog::createEntry([
+                        'action' => 'DOWNLOAD_BULK_FAILED',
+                        'resource_type' => 'DCInstallation',
+                        'resource_id' => 'no_files',
+                        'severity' => 'low',
+                        'description' => 'Client bulk download failed - no files found',
+                        'metadata' => [
+                            'installation_sr_nos' => $installationSrNos,
+                        ],
+                    ]);
+
                     return back()->with('error', 'No files found for the selected installations.');
                 }
             }
@@ -328,6 +459,20 @@ class ClientController extends Controller
             return back()->with('error', 'Failed to create ZIP file.');
         } catch (\Exception $e) {
             Log::error('Bulk ZIP download error: ' . $e->getMessage());
+
+            // Audit bulk download failure
+            AuditLog::createEntry([
+                'action' => 'DOWNLOAD_BULK_FAILED',
+                'resource_type' => 'DCInstallation',
+                'resource_id' => 'system_error',
+                'severity' => 'high',
+                'description' => 'Client bulk download failed due to system error',
+                'metadata' => [
+                    'error' => $e->getMessage(),
+                    'requested_ids' => $installationIds,
+                ],
+            ]);
+
             return back()->with('error', 'An error occurred while creating the ZIP file.');
         }
     }
@@ -394,13 +539,15 @@ class ClientController extends Controller
         return $summary;
     }
 
-    // Export installations data to CSV (Client view)
+    // Export installations data to CSV (Client view) with audit
     public function exportInstallations(Request $request)
     {
         $query = DCInstallation::query();
 
         // Apply filters if provided
+        $filters = [];
         if ($request->has('status') && $request->status !== 'all') {
+            $filters['status'] = $request->status;
             switch ($request->status) {
                 case 'completed':
                     $query->completed();
@@ -418,14 +565,29 @@ class ClientController extends Controller
         }
 
         if ($request->has('region') && $request->region) {
+            $filters['region'] = $request->region;
             $query->byRegion($request->region);
         }
 
         if ($request->has('district') && $request->district) {
+            $filters['district'] = $request->district;
             $query->byDistrict($request->district);
         }
 
         $installations = $query->orderBy('created_at', 'desc')->get();
+
+        // Audit client export action
+        AuditLog::createEntry([
+            'action' => 'EXPORT',
+            'resource_type' => 'DCInstallation',
+            'resource_id' => 'client_export',
+            'severity' => 'medium',
+            'description' => "Client exported {$installations->count()} DC installations to CSV",
+            'metadata' => [
+                'filters' => $filters,
+                'export_count' => $installations->count(),
+            ],
+        ]);
 
         $filename = 'dc_installations_client_export_' . date('Y-m-d_H-i-s') . '.csv';
 
