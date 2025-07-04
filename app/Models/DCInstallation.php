@@ -6,10 +6,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Storage;
+use App\Traits\Auditable;
 
 class DCInstallation extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, Auditable;
 
     protected $table = 'dc_installations';
 
@@ -125,6 +126,18 @@ class DCInstallation extends Model
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',
+    ];
+
+    // Audit Configuration
+    protected $auditExclude = [
+        'created_by',
+        'updated_by',
+    ];
+
+    protected $auditSeverity = [
+        'create' => 'low',
+        'update' => 'low',
+        'delete' => 'high',
     ];
 
     // SCOPES FOR REPORT FILTRATION
@@ -462,6 +475,123 @@ class DCInstallation extends Model
         $lastNumber = $lastRecord ? (int) str_replace(['DC-', '-IN'], '', $lastRecord->sr_no) : 0;
 
         return 'DC-' . str_pad($lastNumber + 1, 4, '0', STR_PAD_LEFT) . '-IN';
+    }
+
+    // AUDIT METHODS
+
+    /**
+     * Override the audit identifier to use sr_no
+     */
+    protected function getAuditIdentifier(): string
+    {
+        return $this->sr_no ?: (string) $this->getKey();
+    }
+
+    /**
+     * Get custom audit description based on the action
+     */
+    protected function getAuditDescription(string $action): string
+    {
+        $statusInfo = '';
+        if (isset($this->attributes['installation_status'])) {
+            $statusInfo = " (Status: {$this->attributes['installation_status']})";
+        }
+
+        return ucfirst($action) . " DC Installation #{$this->getAuditIdentifier()}{$statusInfo}";
+    }
+
+    /**
+     * Override audit severity for specific actions
+     */
+    protected function getAuditSeverity(string $action): string
+    {
+        // High priority installations get higher severity
+        if (isset($this->attributes['priority']) && $this->attributes['priority'] === 'High') {
+            return $action === 'delete' ? 'critical' : 'medium';
+        }
+
+        return parent::getAuditSeverity($action);
+    }
+
+    /**
+     * Check if significant changes occurred for audit
+     */
+    protected function shouldAudit(string $action): bool
+    {
+        if (!parent::shouldAudit($action)) {
+            return false;
+        }
+
+        // For updates, only audit if important fields changed
+        if ($action === 'update') {
+            $importantFields = [
+                'installation_status',
+                'delivery_status',
+                'priority',
+                'assigned_technician',
+                'installation_date',
+                'delivery_date',
+                'receiver_name',
+                'location_address',
+                'district',
+                'region_division',
+            ];
+
+            $changedFields = array_keys($this->getChanges());
+            $importantChanges = array_intersect($changedFields, $importantFields);
+
+            return !empty($importantChanges);
+        }
+
+        return true;
+    }
+
+    /**
+     * Manually audit file downloads
+     */
+    public function auditFileDownload(string $fileType, string $fileName = null): void
+    {
+        $description = "Downloaded {$fileType}" . ($fileName ? " ({$fileName})" : '') . " for DC Installation #{$this->getAuditIdentifier()}";
+
+        AuditLog::logDownload(
+            'DCInstallation',
+            $this->getAuditIdentifier(),
+            $description
+        );
+    }
+
+    /**
+     * Manually audit bulk file downloads
+     */
+    public function auditBulkDownload(): void
+    {
+        AuditLog::logDownload(
+            'DCInstallation',
+            $this->getAuditIdentifier(),
+            "Downloaded all files for DC Installation #{$this->getAuditIdentifier()}"
+        );
+    }
+
+    /**
+     * Manually audit when installation is viewed
+     */
+    public function auditView(string $description = null): void
+    {
+        parent::auditView($description ?: "Viewed DC Installation #{$this->getAuditIdentifier()}");
+    }
+
+    /**
+     * Manually audit shareable link generation
+     */
+    public function auditShareLinkGenerated(): void
+    {
+        AuditLog::createEntry([
+            'action' => 'SHARE',
+            'resource_type' => 'DCInstallation',
+            'resource_id' => $this->getAuditIdentifier(),
+            'severity' => 'medium',
+            'description' => "Generated shareable link for DC Installation #{$this->getAuditIdentifier()}",
+        ]);
     }
 
     // RELATIONSHIPS (if needed)
