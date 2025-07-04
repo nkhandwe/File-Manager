@@ -116,6 +116,9 @@ Route::middleware(['auth', 'verified', 'role:Admin'])->prefix('admin')->name('ad
     // Logs and Audit
     Route::get('/logs', [AdminController::class, 'logs'])->name('logs');
     Route::get('/audit', [AdminController::class, 'audit'])->name('audit');
+    Route::get('/audit/export', [AdminController::class, 'exportAudit'])->name('audit.export');
+    Route::delete('/audit/clear', [AdminController::class, 'clearAuditLogs'])->name('audit.clear');
+    Route::get('/audit/stats', [AdminController::class, 'getAuditStats'])->name('audit.stats');
 });
 
 require __DIR__ . '/auth.php';

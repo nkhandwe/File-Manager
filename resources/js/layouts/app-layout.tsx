@@ -92,9 +92,9 @@ export default function AppLayout({ children, breadcrumbs = [] }: AppLayoutProps
                 // },
                 {
                     name: 'Audit Logs',
-                    href: '/admin/logs',
+                    href: '/admin/audit',
                     icon: Activity,
-                    current: location.pathname.startsWith('/admin/logs') || location.pathname.startsWith('/admin/audit'),
+                    current: location.pathname.startsWith('/admin/audit') || location.pathname.startsWith('/admin/audit'),
                 },
                 // ...baseItems,
             ];
