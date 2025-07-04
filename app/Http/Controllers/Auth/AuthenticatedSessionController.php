@@ -1,0 +1,78 @@
+<?php
+
+namespace App\Http\Controllers\Auth;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Auth\LoginRequest;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class AuthenticatedSessionController extends Controller
+{
+    /**
+     * Show the login page.
+     */
+    public function create(Request $request): Response
+    {
+        return Inertia::render('auth/login', [
+            'canResetPassword' => Route::has('password.request'),
+            'status' => $request->session()->get('status'),
+        ]);
+    }
+
+    /**
+     * Handle an incoming authentication request.
+     */
+    public function store(LoginRequest $request): RedirectResponse
+    {
+        $request->authenticate();
+
+        $request->session()->regenerate();
+
+        // Get the authenticated user
+        $user = Auth::user();
+
+        // Check if user is active
+        if (!$user->is_active) {
+            Auth::logout();
+            return redirect()->route('login')->withErrors([
+                'email' => 'Your account has been deactivated. Please contact administrator.',
+            ]);
+        }
+
+        // Redirect based on user type
+        $redirectRoute = $this->getRedirectRouteByUserType($user->user_type);
+
+        return redirect()->intended($redirectRoute);
+    }
+
+    /**
+     * Destroy an authenticated session.
+     */
+    public function destroy(Request $request): RedirectResponse
+    {
+        Auth::guard('web')->logout();
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect('/');
+    }
+
+    /**
+     * Get redirect route based on user type
+     */
+    private function getRedirectRouteByUserType(string $userType): string
+    {
+        return match ($userType) {
+            'Admin' => route('admin.dashboard'),
+            'Client' => route('client.dashboard'),
+            'User' => route('dashboard'),
+            default => route('dashboard'),
+        };
+    }
+}
