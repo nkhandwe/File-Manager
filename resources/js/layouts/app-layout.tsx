@@ -1,21 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import {
-    Activity,
-    BarChart3,
-    Download,
-    FileText,
-    Home,
-    LayoutDashboard,
-    LogOut,
-    Menu,
-    Monitor,
-    Package,
-    Settings,
-    Shield,
-    User,
-    Users,
-    X,
-} from 'lucide-react';
+import { Activity, BarChart3, Download, FileText, Home, LayoutDashboard, LogOut, Menu, Monitor, Package, Shield, User, Users, X } from 'lucide-react';
 import { useState } from 'react';
 
 interface BreadcrumbItem {
@@ -45,6 +29,7 @@ interface PageProps {
 
 export default function AppLayout({ children, breadcrumbs = [] }: AppLayoutProps) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
     const { auth } = usePage<PageProps>().props;
     const { user } = auth;
 
@@ -84,19 +69,12 @@ export default function AppLayout({ children, breadcrumbs = [] }: AppLayoutProps
                     icon: BarChart3,
                     current: location.pathname.startsWith('/admin/reports') || location.pathname.startsWith('/admin/analytics'),
                 },
-                // {
-                //     name: 'System Settings',
-                //     href: '/admin/settings',
-                //     icon: Settings,
-                //     current: location.pathname.startsWith('/admin/settings'),
-                // },
                 {
                     name: 'Audit Logs',
                     href: '/admin/audit',
                     icon: Activity,
-                    current: location.pathname.startsWith('/admin/audit') || location.pathname.startsWith('/admin/audit'),
+                    current: location.pathname.startsWith('/admin/audit'),
                 },
-                // ...baseItems,
             ];
         } else if (user.user_type === 'Client') {
             return [
@@ -130,7 +108,6 @@ export default function AppLayout({ children, breadcrumbs = [] }: AppLayoutProps
                     icon: User,
                     current: location.pathname === '/client/profile',
                 },
-                // ...baseItems,
             ];
         } else {
             // Regular User
@@ -148,8 +125,76 @@ export default function AppLayout({ children, breadcrumbs = [] }: AppLayoutProps
 
     const menuItems = getMenuItems();
 
-    const handleLogout = () => {
-        router.post('/logout');
+    const handleLogout = async () => {
+        if (isLoggingOut) return; // Prevent multiple logout attempts
+
+        setIsLoggingOut(true);
+
+        try {
+            // Method 1: Try the standard Laravel logout route
+            await router.post(
+                '/logout',
+                {},
+                {
+                    onSuccess: () => {
+                        // Redirect to home page after successful logout
+                        window.location.href = '/';
+                    },
+                    onError: (errors) => {
+                        console.error('Logout error:', errors);
+                        // If the POST request fails, try alternative methods
+                        handleLogoutFallback();
+                    },
+                    onFinish: () => {
+                        setIsLoggingOut(false);
+                    },
+                },
+            );
+        } catch (error) {
+            console.error('Logout failed:', error);
+            handleLogoutFallback();
+        }
+    };
+
+    const handleLogoutFallback = () => {
+        // Method 2: Try GET request to logout
+        try {
+            router.get(
+                '/logout',
+                {},
+                {
+                    onSuccess: () => {
+                        window.location.href = '/';
+                    },
+                    onError: () => {
+                        // Method 3: Direct browser navigation as last resort
+                        window.location.href = '/logout';
+                    },
+                    onFinish: () => {
+                        setIsLoggingOut(false);
+                    },
+                },
+            );
+        } catch (error) {
+            // Method 4: Manual form submission as absolute fallback
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/logout';
+
+            // Add CSRF token if available
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            if (csrfToken) {
+                const csrfInput = document.createElement('input');
+                csrfInput.type = 'hidden';
+                csrfInput.name = '_token';
+                csrfInput.value = csrfToken;
+                form.appendChild(csrfInput);
+            }
+
+            document.body.appendChild(form);
+            form.submit();
+            setIsLoggingOut(false);
+        }
     };
 
     const getUserTypeColor = (userType: string) => {
@@ -203,12 +248,19 @@ export default function AppLayout({ children, breadcrumbs = [] }: AppLayoutProps
                             </div>
                             <div className="ml-3 min-w-0 flex-1">
                                 <p className="truncate text-sm font-medium text-gray-900 dark:text-white">{user.name}</p>
+                                <p className="truncate text-xs text-gray-500 dark:text-gray-400">{user.email}</p>
                                 <div className="mt-1 flex items-center">
                                     <span
                                         className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getUserTypeColor(user.user_type)}`}
                                     >
                                         {user.user_type}
                                     </span>
+                                    {user.is_active && (
+                                        <span className="ml-2 flex h-2 w-2">
+                                            <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-green-400 opacity-75"></span>
+                                            <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500"></span>
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -245,10 +297,24 @@ export default function AppLayout({ children, breadcrumbs = [] }: AppLayoutProps
                     <div className="border-t border-gray-200 p-4 dark:border-gray-700">
                         <button
                             onClick={handleLogout}
-                            className="group flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                            disabled={isLoggingOut}
+                            className={`group flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                                isLoggingOut
+                                    ? 'cursor-not-allowed opacity-50'
+                                    : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                            }`}
                         >
-                            <LogOut className="mr-3 h-5 w-5 text-gray-400 group-hover:text-gray-500 dark:text-gray-500 dark:group-hover:text-gray-400" />
-                            Sign out
+                            {isLoggingOut ? (
+                                <>
+                                    <div className="mr-3 h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600"></div>
+                                    Signing out...
+                                </>
+                            ) : (
+                                <>
+                                    <LogOut className="mr-3 h-5 w-5 text-gray-400 group-hover:text-gray-500 dark:text-gray-500 dark:group-hover:text-gray-400" />
+                                    Sign out
+                                </>
+                            )}
                         </button>
                     </div>
                 </div>
@@ -293,7 +359,29 @@ export default function AppLayout({ children, breadcrumbs = [] }: AppLayoutProps
 
                         {/* User menu */}
                         <div className="flex items-center space-x-4">
-                            <span className="text-sm text-gray-500 dark:text-gray-400">Welcome, {user.name}</span>
+                            <div className="flex items-center space-x-2">
+                                <span className="text-sm text-gray-500 dark:text-gray-400">Welcome,</span>
+                                <span className="text-sm font-medium text-gray-900 dark:text-white">{user.name}</span>
+                                <span
+                                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getUserTypeColor(user.user_type)}`}
+                                >
+                                    {user.user_type}
+                                </span>
+                            </div>
+
+                            {/* Quick logout button in top bar */}
+                            <button
+                                onClick={handleLogout}
+                                disabled={isLoggingOut}
+                                className="text-gray-400 hover:text-gray-600 disabled:opacity-50 dark:text-gray-500 dark:hover:text-gray-300"
+                                title="Sign out"
+                            >
+                                {isLoggingOut ? (
+                                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600"></div>
+                                ) : (
+                                    <LogOut className="h-5 w-5" />
+                                )}
+                            </button>
                         </div>
                     </div>
                 </div>

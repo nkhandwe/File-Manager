@@ -354,6 +354,20 @@ class AdminController extends Controller
         ]);
     }
 
+    public function createUser()
+    {
+        // Audit user creation page access
+        AuditLog::createEntry([
+            'action' => 'VIEW',
+            'resource_type' => 'System',
+            'resource_id' => 'admin_create_user',
+            'severity' => 'low',
+            'description' => 'Admin accessed user creation page',
+        ]);
+
+        return Inertia::render('Admin/CreateUser');
+    }
+
     public function storeUser(Request $request)
     {
         $validator = Validator::make($request->all(), [

@@ -510,9 +510,9 @@ export default function Audit({ auditEntries, filters, users }: Props) {
                                 <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
                                     <div>
                                         <p className="text-sm text-gray-700 dark:text-gray-300">
-                                            Showing <span className="font-medium">{auditEntries.meta.from || 0}</span> to{' '}
-                                            <span className="font-medium">{auditEntries.meta.to || 0}</span> of{' '}
-                                            <span className="font-medium">{auditEntries.meta.total || 0}</span> results
+                                            {/* Showing <span className="font-medium">{auditEntries.meta.from || 0}</span> to{' '} */}
+                                            {/* <span className="font-medium">{auditEntries.meta.to || 0}</span> of{' '}
+                                            <span className="font-medium">{auditEntries.meta.total || 0}</span> results */}
                                         </p>
                                     </div>
                                     <div>

@@ -1,6 +1,24 @@
 import { Head, router } from '@inertiajs/react';
-import { AlertCircle, Calendar, CheckCircle, File, FileImage, UploadIcon, Monitor, Package, Save, Trash2, Upload, User, X, Sun, Moon } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import {
+    Activity,
+    AlertCircle,
+    BarChart3,
+    CheckCircle,
+    Clock,
+    FileText,
+    Monitor,
+    Moon,
+    Package,
+    Server,
+    Settings,
+    Shield,
+    Sun,
+    TrendingUp,
+    User,
+    Users,
+    Zap,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 interface Flash {
     success?: string;
@@ -9,29 +27,36 @@ interface Flash {
 
 interface PageProps {
     flash?: Flash;
-    regions: string[];
+    installations?: any;
+    stats?: {
+        total: number;
+        delivered: number;
+        installed: number;
+        pending_delivery: number;
+        pending_installation: number;
+        in_progress: number;
+        overdue: number;
+        high_priority: number;
+        this_week: number;
+    };
     auth?: {
-        user?: any;
+        user?: {
+            id: number;
+            name: string;
+            email: string;
+            user_type: string;
+        };
     };
 }
 
-interface FilePreview {
-    file: File;
-    url: string;
-    type: string;
-    size: string;
-}
-
-export default function Welcome({ flash, regions, auth }: PageProps) {
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
+export default function Welcome({ flash, installations, stats, auth }: PageProps) {
     const [darkMode, setDarkMode] = useState(false);
 
     // Initialize dark mode from localStorage or system preference
     useEffect(() => {
         const savedTheme = localStorage.getItem('theme');
         const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        
+
         if (savedTheme === 'dark' || (!savedTheme && systemDark)) {
             setDarkMode(true);
             document.documentElement.classList.add('dark');
@@ -45,7 +70,7 @@ export default function Welcome({ flash, regions, auth }: PageProps) {
     const toggleDarkMode = () => {
         const newDarkMode = !darkMode;
         setDarkMode(newDarkMode);
-        
+
         if (newDarkMode) {
             document.documentElement.classList.add('dark');
             localStorage.setItem('theme', 'dark');
@@ -55,284 +80,131 @@ export default function Welcome({ flash, regions, auth }: PageProps) {
         }
     };
 
-    // Form state
-    const [formData, setFormData] = useState({
-        sr_no: '',
-        region_division: '',
-        location_address: '',
-        district: '',
-        tahsil: '',
-        pin_code: '',
-        receiver_name: '',
-        contact_no: '',
-        dc_ir_no: '',
-        dispatch_date: '',
-        delivery_date: '',
-        installation_date: '',
-        total_boxes: '',
-        courier_docket_no: '',
-        representative_name: '',
-        aio_hp_serial: '',
-        keyboard_serial: '',
-        mouse_serial: '',
-        ups_serial: '',
-        antivirus: '',
-        breakage_notes: '',
-        ir_receiver_name: '',
-        ir_receiver_designation: '',
-        entity_vendor_name: '',
-        vendor_contact_number: '',
-        charges: '',
-        remarks: '',
-        delivery_status: 'Pending',
-        installation_status: 'Pending',
-        hp_440_g9_serial: '',
-        hp_keyboard_serial: '',
-        hp_mouse_serial: '',
-        updated_antivirus: '',
-        updated_breakage_notes: '',
-        updated_ir_receiver_name: '',
-        updated_ir_receiver_designation: '',
-        updated_installation_date: '',
-        updated_remarks: '',
-        hostname: '',
-        updated_entity_vendor: '',
-        updated_contact_number: '',
-        priority: 'Medium',
-        assigned_technician: '',
-        internal_notes: '',
-        soft_copy_dc: false,
-        soft_copy_ir: false,
-        original_pod_received: false,
-        original_dc_received: false,
-        ir_original_copy_received: false,
-        back_side_photo_taken: false,
-        os_installation_photo_taken: false,
-        belarc_report_generated: false,
-    });
-
-    const [filePreviews, setFilePreviews] = useState<{ [key: string]: FilePreview }>({});
-
-    const fileFields = [
-        { key: 'delivery_report_file', label: 'Delivery Report', accept: '.pdf,.jpg,.jpeg,.png' },
-        { key: 'installation_report_file', label: 'Installation Report', accept: '.pdf,.jpg,.jpeg,.png' },
-        { key: 'belarc_report_file', label: 'Belarc Report', accept: '.pdf' },
-        { key: 'back_side_photo_file', label: 'Back Side Photo', accept: '.jpg,.jpeg,.png' },
-        { key: 'os_installation_photo_file', label: 'OS Installation Photo', accept: '.jpg,.jpeg,.png' },
-        { key: 'keyboard_photo_file', label: 'Keyboard Photo', accept: '.jpg,.jpeg,.png' },
-        { key: 'mouse_photo_file', label: 'Mouse Photo', accept: '.jpg,.jpeg,.png' },
-        { key: 'screenshot_file', label: 'Screenshot', accept: '.jpg,.jpeg,.png' },
-        { key: 'evidence_file', label: 'Evidence File', accept: '.pdf,.jpg,.jpeg,.png,.doc,.docx' },
+    const features = [
+        {
+            icon: Monitor,
+            title: 'Installation Tracking',
+            description: 'Track DC installations from dispatch to completion with real-time status updates.',
+            color: 'blue',
+        },
+        {
+            icon: FileText,
+            title: 'Document Management',
+            description: 'Manage delivery reports, installation reports, and all related documentation.',
+            color: 'green',
+        },
+        {
+            icon: BarChart3,
+            title: 'Analytics & Reports',
+            description: 'Generate comprehensive reports and analytics for better decision making.',
+            color: 'purple',
+        },
+        {
+            icon: Users,
+            title: 'User Management',
+            description: 'Role-based access control for administrators, clients, and technicians.',
+            color: 'orange',
+        },
+        {
+            icon: Shield,
+            title: 'Audit Trail',
+            description: 'Complete audit logging for security and compliance requirements.',
+            color: 'red',
+        },
+        {
+            icon: Package,
+            title: 'Equipment Tracking',
+            description: 'Track equipment serials, warranties, and maintenance schedules.',
+            color: 'indigo',
+        },
     ];
 
-    const defaultRegions = ['Amravati', 'Nashik', 'Pune', 'Mumbai', 'Nagpur', 'Aurangabad'];
-    const regionsToUse = regions?.length > 0 ? regions : defaultRegions;
-
-    const handleInputChange = (field: string, value: string | boolean | number) => {
-        setFormData((prev) => ({ ...prev, [field]: value }));
+    const getColorClasses = (color: string) => {
+        const colors = {
+            blue: 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/20',
+            green: 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/20',
+            purple: 'text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/20',
+            orange: 'text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/20',
+            red: 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/20',
+            indigo: 'text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/20',
+        };
+        return colors[color] || colors.blue;
     };
 
-    const formatFileSize = (bytes: number): string => {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    };
-
-    const handleFileChange = (field: string, file: File | null) => {
-        if (file) {
-            if (file.size > 10 * 1024 * 1024) {
-                alert('File size must be less than 10MB');
-                return;
-            }
-
-            const url = URL.createObjectURL(file);
-            const type = file.type.startsWith('image/') ? 'image' : 'document';
-            const size = formatFileSize(file.size);
-
-            setFilePreviews((prev) => ({
-                ...prev,
-                [field]: { file, url, type, size },
-            }));
-        }
-    };
-
-    const removeFile = (field: string) => {
-        if (filePreviews[field]) {
-            URL.revokeObjectURL(filePreviews[field].url);
-        }
-        setFilePreviews((prev) => {
-            const newPreviews = { ...prev };
-            delete newPreviews[field];
-            return newPreviews;
-        });
-    };
-
-    const getFileIcon = (type: string, fileName: string) => {
-        if (type === 'image') return <FileImage className="h-8 w-8 text-blue-500" />;
-        if (fileName.toLowerCase().endsWith('.pdf')) return <UploadIcon className="h-8 w-8 text-red-500" />;
-        return <File className="h-8 w-8 text-gray-500 dark:text-gray-400" />;
-    };
-
-    const generateSrNo = () => {
-        const timestamp = Date.now().toString().slice(-6);
-        const srNo = `DC-2025-${timestamp}`;
-        setFormData((prev) => ({ ...prev, sr_no: srNo }));
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setIsSubmitting(true);
-        setSubmitStatus('idle');
-
-        try {
-            const submitData = new FormData();
-
-            // Add all form fields
-            Object.entries(formData).forEach(([key, value]) => {
-                if (value !== null && value !== undefined) {
-                    submitData.append(key, value.toString());
-                }
-            });
-
-            // Add files
-            Object.entries(filePreviews).forEach(([key, preview]) => {
-                submitData.append(key, preview.file);
-            });
-
-            // Submit to Laravel backend
-            router.post('/dc-installations', submitData, {
-                forceFormData: true,
-                onSuccess: () => {
-                    setSubmitStatus('success');
-                    resetForm();
-                },
-                onError: (errors) => {
-                    console.error('Validation errors:', errors);
-                    setSubmitStatus('error');
-                },
-                onFinish: () => {
-                    setIsSubmitting(false);
-                },
-            });
-        } catch (error) {
-            console.error('Submission error:', error);
-            setSubmitStatus('error');
-            setIsSubmitting(false);
-        }
-    };
-
-    const resetForm = () => {
-        setFormData({
-            sr_no: '',
-            region_division: '',
-            location_address: '',
-            district: '',
-            tahsil: '',
-            pin_code: '',
-            receiver_name: '',
-            contact_no: '',
-            dc_ir_no: '',
-            dispatch_date: '',
-            delivery_date: '',
-            installation_date: '',
-            total_boxes: '',
-            courier_docket_no: '',
-            representative_name: '',
-            aio_hp_serial: '',
-            keyboard_serial: '',
-            mouse_serial: '',
-            ups_serial: '',
-            antivirus: '',
-            breakage_notes: '',
-            ir_receiver_name: '',
-            ir_receiver_designation: '',
-            entity_vendor_name: '',
-            vendor_contact_number: '',
-            charges: '',
-            remarks: '',
-            delivery_status: 'Pending',
-            installation_status: 'Pending',
-            hp_440_g9_serial: '',
-            hp_keyboard_serial: '',
-            hp_mouse_serial: '',
-            updated_antivirus: '',
-            updated_breakage_notes: '',
-            updated_ir_receiver_name: '',
-            updated_ir_receiver_designation: '',
-            updated_installation_date: '',
-            updated_remarks: '',
-            hostname: '',
-            updated_entity_vendor: '',
-            updated_contact_number: '',
-            priority: 'Medium',
-            assigned_technician: '',
-            internal_notes: '',
-            soft_copy_dc: false,
-            soft_copy_ir: false,
-            original_pod_received: false,
-            original_dc_received: false,
-            ir_original_copy_received: false,
-            back_side_photo_taken: false,
-            os_installation_photo_taken: false,
-            belarc_report_generated: false,
-        });
-
-        Object.values(filePreviews).forEach((preview) => {
-            URL.revokeObjectURL(preview.url);
-        });
-        setFilePreviews({});
-        setSubmitStatus('idle');
+    const handleNavigation = (route: string) => {
+        router.get(route);
     };
 
     return (
         <>
-            <Head title="DC Installation Management" />
+            <Head title="DC Installation Management System" />
 
-            <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 transition-colors duration-300">
+            <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-100 transition-colors duration-300 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
                 {/* Header */}
-                <header className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm transition-colors duration-300">
-                    <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+                <header className="border-b border-gray-200 bg-white/80 shadow-sm backdrop-blur-sm transition-colors duration-300 dark:border-gray-700 dark:bg-gray-900/80">
+                    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                         <div className="flex items-center justify-between py-6">
-                            <div>
-                                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">DC Installation Management</h1>
-                                <p className="mt-1 text-gray-600 dark:text-gray-300">Settlement Commissioner and Director of Land Record (Maharashtra State)</p>
+                            <div className="flex items-center space-x-4">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+                                    <Monitor className="h-6 w-6" />
+                                </div>
+                                <div>
+                                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">DC Installation Management</h1>
+                                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                                        Settlement Commissioner and Director of Land Record (Maharashtra State)
+                                    </p>
+                                </div>
                             </div>
+
                             <div className="flex items-center gap-4">
                                 {/* Dark Mode Toggle */}
                                 <button
                                     onClick={toggleDarkMode}
-                                    className="inline-flex items-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-700 dark:text-gray-300 transition-colors hover:bg-gray-50 dark:hover:bg-gray-700"
+                                    className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
                                     aria-label="Toggle dark mode"
                                 >
-                                    {darkMode ? (
-                                        <Sun className="h-4 w-4" />
-                                    ) : (
-                                        <Moon className="h-4 w-4" />
-                                    )}
+                                    {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                                 </button>
 
                                 {!auth?.user ? (
                                     <button
-                                        onClick={() => router.get('/login')}
-                                        className="inline-flex items-center rounded-lg border border-blue-600 dark:border-blue-500 bg-white dark:bg-gray-800 px-4 py-2 text-blue-600 dark:text-blue-400 transition-colors hover:bg-blue-50 dark:hover:bg-gray-700"
+                                        onClick={() => handleNavigation('/login')}
+                                        className="inline-flex items-center rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-2 text-white transition-all hover:from-blue-700 hover:to-purple-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                                     >
                                         <User className="mr-2 h-4 w-4" />
                                         Login
                                     </button>
                                 ) : (
-                                    <span className="text-gray-600 dark:text-gray-300">Welcome, {auth.user.name}</span>
+                                    <div className="flex items-center space-x-4">
+                                        <span className="text-sm text-gray-600 dark:text-gray-300">
+                                            Welcome, <span className="font-medium text-gray-900 dark:text-white">{auth.user.name}</span>
+                                        </span>
+                                        <button
+                                            onClick={() => {
+                                                const dashboardRoute =
+                                                    auth.user?.user_type === 'Admin'
+                                                        ? '/admin/dashboard'
+                                                        : auth.user?.user_type === 'Client'
+                                                          ? '/client/dashboard'
+                                                          : '/dashboard';
+                                                handleNavigation(dashboardRoute);
+                                            }}
+                                            className="inline-flex items-center rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-2 text-white transition-all hover:from-blue-700 hover:to-purple-700"
+                                        >
+                                            <BarChart3 className="mr-2 h-4 w-4" />
+                                            Dashboard
+                                        </button>
+                                    </div>
                                 )}
                             </div>
                         </div>
                     </div>
                 </header>
 
-                <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-                    {/* Flash Messages */}
+                {/* Flash Messages */}
+                <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     {flash?.success && (
-                        <div className="mb-6 rounded-lg border border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/20 p-4">
+                        <div className="mt-6 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-700 dark:bg-green-900/20">
                             <div className="flex items-center">
                                 <CheckCircle className="mr-3 h-5 w-5 text-green-600 dark:text-green-400" />
                                 <span className="font-medium text-green-800 dark:text-green-200">{flash.success}</span>
@@ -341,411 +213,387 @@ export default function Welcome({ flash, regions, auth }: PageProps) {
                     )}
 
                     {flash?.error && (
-                        <div className="mb-6 rounded-lg border border-red-200 dark:border-red-700 bg-red-50 dark:bg-red-900/20 p-4">
+                        <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-700 dark:bg-red-900/20">
                             <div className="flex items-center">
                                 <AlertCircle className="mr-3 h-5 w-5 text-red-600 dark:text-red-400" />
                                 <span className="font-medium text-red-800 dark:text-red-200">{flash.error}</span>
                             </div>
                         </div>
                     )}
+                </div>
 
-                    {submitStatus === 'success' && (
-                        <div className="mb-6 rounded-lg border border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/20 p-4">
-                            <div className="flex items-center">
-                                <CheckCircle className="mr-3 h-5 w-5 text-green-600 dark:text-green-400" />
-                                <span className="font-medium text-green-800 dark:text-green-200">Installation record submitted successfully!</span>
-                            </div>
-                        </div>
-                    )}
-
-                    {submitStatus === 'error' && (
-                        <div className="mb-6 rounded-lg border border-red-200 dark:border-red-700 bg-red-50 dark:bg-red-900/20 p-4">
-                            <div className="flex items-center">
-                                <AlertCircle className="mr-3 h-5 w-5 text-red-600 dark:text-red-400" />
-                                <span className="font-medium text-red-800 dark:text-red-200">Error submitting form. Please try again.</span>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Main Form */}
-                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm transition-colors duration-300">
-                        <div className="border-b border-gray-200 dark:border-gray-700 p-6">
-                            <h2 className="text-xl font-bold text-gray-900 dark:text-white">New DC Installation Record</h2>
-                            <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Fill in the details for the new installation record</p>
+                {auth?.user ? (
+                    // Authenticated User Dashboard Preview
+                    <main className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+                        {/* Welcome Section */}
+                        <div className="mb-12 text-center">
+                            <h2 className="mb-4 text-4xl font-bold text-gray-900 dark:text-white">Welcome back, {auth.user.name}!</h2>
+                            <p className="mx-auto max-w-3xl text-xl text-gray-600 dark:text-gray-300">
+                                Manage your DC installations efficiently with our comprehensive management system.
+                            </p>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="p-6">
-                            {/* Basic Information */}
-                            <div className="mb-8">
-                                <h3 className="mb-4 flex items-center text-lg font-semibold text-gray-900 dark:text-white">
-                                    <Monitor className="mr-2 h-5 w-5 text-blue-600 dark:text-blue-400" />
-                                    Basic Information
-                                </h3>
-                                <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">Total Boxes</label>
-                                        <input
-                                            type="number"
-                                            value={formData.total_boxes}
-                                            onChange={(e) => handleInputChange('total_boxes', e.target.value)}
-                                            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:outline-none transition-colors duration-200"
-                                            min="1"
-                                        />
+                        {/* Quick Stats */}
+                        {stats && (
+                            <div className="mb-12 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+                                <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Installations</p>
+                                            <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.total}</p>
+                                        </div>
+                                        <div className="rounded-lg bg-blue-100 p-3 dark:bg-blue-900/20">
+                                            <Package className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                                        </div>
                                     </div>
+                                </div>
 
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">Courier Docket No</label>
-                                        <input
-                                            type="text"
-                                            value={formData.courier_docket_no}
-                                            onChange={(e) => handleInputChange('courier_docket_no', e.target.value)}
-                                            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:outline-none transition-colors duration-200"
-                                        />
+                                <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Completed</p>
+                                            <p className="text-3xl font-bold text-green-600 dark:text-green-400">{stats.installed}</p>
+                                        </div>
+                                        <div className="rounded-lg bg-green-100 p-3 dark:bg-green-900/20">
+                                            <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+                                        </div>
                                     </div>
+                                </div>
 
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">Representative Name</label>
-                                        <input
-                                            type="text"
-                                            value={formData.representative_name}
-                                            onChange={(e) => handleInputChange('representative_name', e.target.value)}
-                                            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:outline-none transition-colors duration-200"
-                                        />
+                                <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">In Progress</p>
+                                            <p className="text-3xl font-bold text-orange-600 dark:text-orange-400">{stats.in_progress}</p>
+                                        </div>
+                                        <div className="rounded-lg bg-orange-100 p-3 dark:bg-orange-900/20">
+                                            <Clock className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">This Week</p>
+                                            <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">{stats.this_week}</p>
+                                        </div>
+                                        <div className="rounded-lg bg-purple-100 p-3 dark:bg-purple-900/20">
+                                            <TrendingUp className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
+                        )}
 
-                            {/* Equipment Details */}
-                            <div className="mb-8">
-                                <h3 className="mb-4 flex items-center text-lg font-semibold text-gray-900 dark:text-white">
-                                    <Monitor className="mr-2 h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-                                    Equipment Details
-                                </h3>
-                                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">AIO-HP Serial Number</label>
-                                        <input
-                                            type="text"
-                                            value={formData.aio_hp_serial}
-                                            onChange={(e) => handleInputChange('aio_hp_serial', e.target.value)}
-                                            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:outline-none transition-colors duration-200"
-                                        />
+                        {/* Quick Actions */}
+                        <div className="mb-12 rounded-xl border border-gray-200 bg-white p-8 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                            <h3 className="mb-6 text-2xl font-bold text-gray-900 dark:text-white">Quick Actions</h3>
+                            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                                <button
+                                    onClick={() => {
+                                        const dashboardRoute =
+                                            auth.user?.user_type === 'Admin'
+                                                ? '/admin/dashboard'
+                                                : auth.user?.user_type === 'Client'
+                                                  ? '/client/dashboard'
+                                                  : '/dashboard';
+                                        handleNavigation(dashboardRoute);
+                                    }}
+                                    className="flex items-center rounded-lg border border-gray-200 p-4 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700"
+                                >
+                                    <BarChart3 className="mr-4 h-8 w-8 text-blue-600 dark:text-blue-400" />
+                                    <div className="text-left">
+                                        <h4 className="font-medium text-gray-900 dark:text-white">View Dashboard</h4>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400">Access your main dashboard</p>
                                     </div>
+                                </button>
 
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">Keyboard Serial</label>
-                                        <input
-                                            type="text"
-                                            value={formData.keyboard_serial}
-                                            onChange={(e) => handleInputChange('keyboard_serial', e.target.value)}
-                                            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:outline-none transition-colors duration-200"
-                                        />
-                                    </div>
+                                {auth.user.user_type === 'Admin' && (
+                                    <button
+                                        onClick={() => handleNavigation('/admin/installations')}
+                                        className="flex items-center rounded-lg border border-gray-200 p-4 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700"
+                                    >
+                                        <Settings className="mr-4 h-8 w-8 text-green-600 dark:text-green-400" />
+                                        <div className="text-left">
+                                            <h4 className="font-medium text-gray-900 dark:text-white">Manage Installations</h4>
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">View and manage all installations</p>
+                                        </div>
+                                    </button>
+                                )}
 
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">Mouse Serial</label>
-                                        <input
-                                            type="text"
-                                            value={formData.mouse_serial}
-                                            onChange={(e) => handleInputChange('mouse_serial', e.target.value)}
-                                            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:outline-none transition-colors duration-200"
-                                        />
+                                <button
+                                    onClick={() => {
+                                        const reportRoute = auth.user?.user_type === 'Admin' ? '/admin/reports' : '/client/reports';
+                                        handleNavigation(reportRoute);
+                                    }}
+                                    className="flex items-center rounded-lg border border-gray-200 p-4 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700"
+                                >
+                                    <FileText className="mr-4 h-8 w-8 text-purple-600 dark:text-purple-400" />
+                                    <div className="text-left">
+                                        <h4 className="font-medium text-gray-900 dark:text-white">View Reports</h4>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400">Generate and download reports</p>
                                     </div>
-
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">UPS Serial</label>
-                                        <input
-                                            type="text"
-                                            value={formData.ups_serial}
-                                            onChange={(e) => handleInputChange('ups_serial', e.target.value)}
-                                            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:outline-none transition-colors duration-200"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">Hostname</label>
-                                        <input
-                                            type="text"
-                                            value={formData.hostname}
-                                            onChange={(e) => handleInputChange('hostname', e.target.value)}
-                                            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:outline-none transition-colors duration-200"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">Assigned Technician</label>
-                                        <input
-                                            type="text"
-                                            value={formData.assigned_technician}
-                                            onChange={(e) => handleInputChange('assigned_technician', e.target.value)}
-                                            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:outline-none transition-colors duration-200"
-                                        />
-                                    </div>
-                                </div>
+                                </button>
                             </div>
+                        </div>
 
-                            {/* Status Fields */}
-                            <div className="mb-8">
-                                <h3 className="mb-4 flex items-center text-lg font-semibold text-gray-900 dark:text-white">
-                                    <CheckCircle className="mr-2 h-5 w-5 text-green-600 dark:text-green-400" />
-                                    Status Information
-                                </h3>
-                                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">Delivery Status</label>
-                                        <select
-                                            value={formData.delivery_status}
-                                            onChange={(e) => handleInputChange('delivery_status', e.target.value)}
-                                            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:outline-none transition-colors duration-200"
+                        {/* Recent Installations */}
+                        {installations?.data && installations.data.length > 0 && (
+                            <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                                <div className="mb-6 flex items-center justify-between">
+                                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white">Recent Installations</h3>
+                                    <button
+                                        onClick={() => {
+                                            const installationsRoute =
+                                                auth.user?.user_type === 'Admin' ? '/admin/installations' : '/client/installations';
+                                            handleNavigation(installationsRoute);
+                                        }}
+                                        className="font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                                    >
+                                        View All →
+                                    </button>
+                                </div>
+                                <div className="space-y-4">
+                                    {installations.data.slice(0, 5).map((installation: any) => (
+                                        <div
+                                            key={installation.id}
+                                            className="flex items-center justify-between rounded-lg border border-gray-200 p-4 dark:border-gray-700"
                                         >
-                                            <option value="Pending">Pending</option>
-                                            <option value="In Transit">In Transit</option>
-                                            <option value="Delivered">Delivered</option>
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">Installation Status</label>
-                                        <select
-                                            value={formData.installation_status}
-                                            onChange={(e) => handleInputChange('installation_status', e.target.value)}
-                                            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:outline-none transition-colors duration-200"
-                                        >
-                                            <option value="Pending">Pending</option>
-                                            <option value="In Progress">In Progress</option>
-                                            <option value="Installed">Installed</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Document Status Checkboxes */}
-                            <div className="mb-8">
-                                <h3 className="mb-4 flex items-center text-lg font-semibold text-gray-900 dark:text-white">
-                                    <File className="mr-2 h-5 w-5 text-blue-600 dark:text-blue-400" />
-                                    Document Status
-                                </h3>
-                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                    <label className="flex items-center">
-                                        <input
-                                            type="checkbox"
-                                            checked={formData.soft_copy_dc}
-                                            onChange={(e) => handleInputChange('soft_copy_dc', e.target.checked)}
-                                            className="mr-3 h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 focus:ring-blue-500 dark:focus:ring-blue-400"
-                                        />
-                                        <span className="text-sm text-gray-700 dark:text-gray-300">Soft Copy DC</span>
-                                    </label>
-
-                                    <label className="flex items-center">
-                                        <input
-                                            type="checkbox"
-                                            checked={formData.soft_copy_ir}
-                                            onChange={(e) => handleInputChange('soft_copy_ir', e.target.checked)}
-                                            className="mr-3 h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 focus:ring-blue-500 dark:focus:ring-blue-400"
-                                        />
-                                        <span className="text-sm text-gray-700 dark:text-gray-300">Soft Copy IR</span>
-                                    </label>
-
-                                    <label className="flex items-center">
-                                        <input
-                                            type="checkbox"
-                                            checked={formData.original_pod_received}
-                                            onChange={(e) => handleInputChange('original_pod_received', e.target.checked)}
-                                            className="mr-3 h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 focus:ring-blue-500 dark:focus:ring-blue-400"
-                                        />
-                                        <span className="text-sm text-gray-700 dark:text-gray-300">Original POD Received</span>
-                                    </label>
-
-                                    <label className="flex items-center">
-                                        <input
-                                            type="checkbox"
-                                            checked={formData.original_dc_received}
-                                            onChange={(e) => handleInputChange('original_dc_received', e.target.checked)}
-                                            className="mr-3 h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 focus:ring-blue-500 dark:focus:ring-blue-400"
-                                        />
-                                        <span className="text-sm text-gray-700 dark:text-gray-300">Original DC Received</span>
-                                    </label>
-
-                                    <label className="flex items-center">
-                                        <input
-                                            type="checkbox"
-                                            checked={formData.ir_original_copy_received}
-                                            onChange={(e) => handleInputChange('ir_original_copy_received', e.target.checked)}
-                                            className="mr-3 h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 focus:ring-blue-500 dark:focus:ring-blue-400"
-                                        />
-                                        <span className="text-sm text-gray-700 dark:text-gray-300">IR Original Copy Received</span>
-                                    </label>
-
-                                    <label className="flex items-center">
-                                        <input
-                                            type="checkbox"
-                                            checked={formData.back_side_photo_taken}
-                                            onChange={(e) => handleInputChange('back_side_photo_taken', e.target.checked)}
-                                            className="mr-3 h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 focus:ring-blue-500 dark:focus:ring-blue-400"
-                                        />
-                                        <span className="text-sm text-gray-700 dark:text-gray-300">Back Side Photo Taken</span>
-                                    </label>
-
-                                    <label className="flex items-center">
-                                        <input
-                                            type="checkbox"
-                                            checked={formData.os_installation_photo_taken}
-                                            onChange={(e) => handleInputChange('os_installation_photo_taken', e.target.checked)}
-                                            className="mr-3 h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 focus:ring-blue-500 dark:focus:ring-blue-400"
-                                        />
-                                        <span className="text-sm text-gray-700 dark:text-gray-300">OS Installation Photo Taken</span>
-                                    </label>
-
-                                    <label className="flex items-center">
-                                        <input
-                                            type="checkbox"
-                                            checked={formData.belarc_report_generated}
-                                            onChange={(e) => handleInputChange('belarc_report_generated', e.target.checked)}
-                                            className="mr-3 h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 focus:ring-blue-500 dark:focus:ring-blue-400"
-                                        />
-                                        <span className="text-sm text-gray-700 dark:text-gray-300">Belarc Report Generated</span>
-                                    </label>
-                                </div>
-                            </div>
-
-                            {/* File Upload Section */}
-                            <div className="mb-8">
-                                <h3 className="mb-4 flex items-center text-lg font-semibold text-gray-900 dark:text-white">
-                                    <Upload className="mr-2 h-5 w-5 text-purple-600 dark:text-purple-400" />
-                                    File Uploads
-                                </h3>
-                                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                                    {fileFields.map(({ key, label, accept }) => (
-                                        <div key={key} className="space-y-2">
-                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
-
-                                            {!filePreviews[key] ? (
-                                                <div className="relative">
-                                                    <input
-                                                        type="file"
-                                                        accept={accept}
-                                                        onChange={(e) => handleFileChange(key, e.target.files?.[0] || null)}
-                                                        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                                                    />
-                                                    <div className="flex h-32 w-full items-center justify-center rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 transition-colors hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20">
-                                                        <div className="text-center">
-                                                            <Upload className="mx-auto h-8 w-8 text-gray-400 dark:text-gray-500" />
-                                                            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Click to upload {label.toLowerCase()}</p>
-                                                            <p className="text-xs text-gray-500 dark:text-gray-500">
-                                                                {accept.replace(/\./g, '').toUpperCase()} up to 10MB
-                                                            </p>
-                                                        </div>
-                                                    </div>
+                                            <div className="flex items-center space-x-4">
+                                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/20">
+                                                    <Monitor className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                                                 </div>
-                                            ) : (
-                                                <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4">
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex items-center">
-                                                            {getFileIcon(filePreviews[key].type, filePreviews[key].file.name)}
-                                                            <div className="ml-3">
-                                                                <p className="max-w-[200px] truncate text-sm font-medium text-gray-900 dark:text-white">
-                                                                    {filePreviews[key].file.name}
-                                                                </p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">{filePreviews[key].size}</p>
-                                                            </div>
-                                                        </div>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => removeFile(key)}
-                                                            className="text-red-500 dark:text-red-400 transition-colors hover:text-red-700 dark:hover:text-red-300"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </button>
-                                                    </div>
-
-                                                    {filePreviews[key].type === 'image' && (
-                                                        <div className="mt-3">
-                                                            <img
-                                                                src={filePreviews[key].url}
-                                                                alt="Preview"
-                                                                className="h-32 w-full rounded border object-cover"
-                                                            />
-                                                        </div>
-                                                    )}
+                                                <div>
+                                                    <h4 className="font-medium text-gray-900 dark:text-white">{installation.sr_no}</h4>
+                                                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                                                        {installation.receiver_name} - {installation.district}
+                                                    </p>
                                                 </div>
-                                            )}
+                                            </div>
+                                            <div className="text-right">
+                                                <span
+                                                    className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
+                                                        installation.installation_status === 'Installed'
+                                                            ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                                                            : installation.installation_status === 'In Progress'
+                                                              ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400'
+                                                              : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                                                    }`}
+                                                >
+                                                    {installation.installation_status}
+                                                </span>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
                             </div>
+                        )}
+                    </main>
+                ) : (
+                    // Public Landing Page
+                    <main className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+                        {/* Hero Section */}
+                        <div className="mb-16 text-center">
+                            <h2 className="mb-6 text-5xl font-bold text-gray-900 dark:text-white">
+                                Streamline Your
+                                <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent"> DC Installations</span>
+                            </h2>
+                            <p className="mx-auto mb-8 max-w-3xl text-xl text-gray-600 dark:text-gray-300">
+                                Comprehensive management system for tracking, monitoring, and managing DC installations across Maharashtra State with
+                                real-time updates and detailed reporting.
+                            </p>
+                            <div className="flex flex-col justify-center gap-4 sm:flex-row">
+                                <button
+                                    onClick={() => handleNavigation('/login')}
+                                    className="inline-flex transform items-center rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-8 py-4 font-medium text-white shadow-lg transition-all hover:scale-105 hover:from-blue-700 hover:to-purple-700"
+                                >
+                                    <User className="mr-2 h-5 w-5" />
+                                    Get Started
+                                </button>
+                                <button
+                                    onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
+                                    className="inline-flex items-center rounded-lg border border-gray-300 px-8 py-4 font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                                >
+                                    <Activity className="mr-2 h-5 w-5" />
+                                    Learn More
+                                </button>
+                            </div>
+                        </div>
 
-                            {/* Internal Notes */}
-                            <div className="mb-8">
-                                <h3 className="mb-4 flex items-center text-lg font-semibold text-gray-900 dark:text-white">
-                                    <File className="mr-2 h-5 w-5 text-gray-600 dark:text-gray-400" />
-                                    Additional Information
-                                </h3>
-                                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">Installation Remarks</label>
-                                        <textarea
-                                            value={formData.remarks}
-                                            onChange={(e) => handleInputChange('remarks', e.target.value)}
-                                            rows={4}
-                                            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:outline-none transition-colors duration-200"
-                                            placeholder="Any installation remarks or notes"
-                                        />
+                        {/* Features Grid */}
+                        <div id="features" className="mb-16">
+                            <div className="mb-12 text-center">
+                                <h3 className="mb-4 text-3xl font-bold text-gray-900 dark:text-white">Powerful Features</h3>
+                                <p className="mx-auto max-w-2xl text-lg text-gray-600 dark:text-gray-300">
+                                    Everything you need to manage DC installations efficiently and effectively.
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
+                                {features.map((feature, index) => (
+                                    <div
+                                        key={index}
+                                        className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800"
+                                    >
+                                        <div className={`inline-flex rounded-lg p-3 ${getColorClasses(feature.color)} mb-4`}>
+                                            <feature.icon className="h-6 w-6" />
+                                        </div>
+                                        <h4 className="mb-3 text-xl font-semibold text-gray-900 dark:text-white">{feature.title}</h4>
+                                        <p className="text-gray-600 dark:text-gray-300">{feature.description}</p>
                                     </div>
+                                ))}
+                            </div>
+                        </div>
 
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">Internal Notes</label>
-                                        <textarea
-                                            value={formData.internal_notes}
-                                            onChange={(e) => handleInputChange('internal_notes', e.target.value)}
-                                            rows={4}
-                                            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:outline-none transition-colors duration-200"
-                                            placeholder="Any internal notes or additional information"
-                                        />
+                        {/* System Stats */}
+                        <div className="mb-16 rounded-2xl bg-gradient-to-r from-blue-600 to-purple-600 p-8 text-white">
+                            <div className="mb-8 text-center">
+                                <h3 className="mb-4 text-3xl font-bold">System Performance</h3>
+                                <p className="text-lg text-blue-100">Real-time statistics and system health</p>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-8 md:grid-cols-4">
+                                <div className="text-center">
+                                    <div className="mb-2 flex justify-center">
+                                        <Server className="h-8 w-8 text-blue-200" />
+                                    </div>
+                                    <div className="mb-1 text-3xl font-bold">99.9%</div>
+                                    <div className="text-blue-200">Uptime</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="mb-2 flex justify-center">
+                                        <Zap className="h-8 w-8 text-blue-200" />
+                                    </div>
+                                    <div className="mb-1 text-3xl font-bold">&lt;200ms</div>
+                                    <div className="text-blue-200">Response Time</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="mb-2 flex justify-center">
+                                        <Shield className="h-8 w-8 text-blue-200" />
+                                    </div>
+                                    <div className="mb-1 text-3xl font-bold">100%</div>
+                                    <div className="text-blue-200">Secure</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="mb-2 flex justify-center">
+                                        <Users className="h-8 w-8 text-blue-200" />
+                                    </div>
+                                    <div className="mb-1 text-3xl font-bold">24/7</div>
+                                    <div className="text-blue-200">Support</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* CTA Section */}
+                        <div className="rounded-2xl border border-gray-200 bg-white p-12 text-center shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                            <h3 className="mb-4 text-3xl font-bold text-gray-900 dark:text-white">Ready to Get Started?</h3>
+                            <p className="mx-auto mb-8 max-w-2xl text-lg text-gray-600 dark:text-gray-300">
+                                Join the digital transformation of DC installation management. Login to access your personalized dashboard and start
+                                managing installations efficiently.
+                            </p>
+                            <button
+                                onClick={() => handleNavigation('/login')}
+                                className="inline-flex transform items-center rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-8 py-4 font-medium text-white shadow-lg transition-all hover:scale-105 hover:from-blue-700 hover:to-purple-700"
+                            >
+                                <User className="mr-2 h-5 w-5" />
+                                Access Dashboard
+                            </button>
+                        </div>
+                    </main>
+                )}
+
+                {/* Footer */}
+                <footer className="mt-20 border-t border-gray-200 bg-white/80 backdrop-blur-sm dark:border-gray-700 dark:bg-gray-900/80">
+                    <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+                        <div className="grid grid-cols-1 gap-8 md:grid-cols-4">
+                            <div className="col-span-1 md:col-span-2">
+                                <div className="mb-4 flex items-center space-x-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+                                        <Monitor className="h-5 w-5" />
+                                    </div>
+                                    <span className="text-xl font-bold text-gray-900 dark:text-white">DC Management</span>
+                                </div>
+                                <p className="mb-4 text-gray-600 dark:text-gray-300">
+                                    Comprehensive DC installation management system for Maharashtra State's Settlement Commissioner and Director of
+                                    Land Record.
+                                </p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">© 2025 ASK Technologies - Cybernet IT Pvt. Ltd.</p>
+                            </div>
+
+                            <div>
+                                <h4 className="mb-4 font-semibold text-gray-900 dark:text-white">Quick Links</h4>
+                                <ul className="space-y-2 text-sm">
+                                    <li>
+                                        <a href="#" className="text-gray-600 hover:text-blue-600 dark:text-gray-300 dark:hover:text-blue-400">
+                                            Dashboard
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a href="#" className="text-gray-600 hover:text-blue-600 dark:text-gray-300 dark:hover:text-blue-400">
+                                            Installations
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a href="#" className="text-gray-600 hover:text-blue-600 dark:text-gray-300 dark:hover:text-blue-400">
+                                            Reports
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a href="#" className="text-gray-600 hover:text-blue-600 dark:text-gray-300 dark:hover:text-blue-400">
+                                            Analytics
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div>
+                                <h4 className="mb-4 font-semibold text-gray-900 dark:text-white">Support</h4>
+                                <ul className="space-y-2 text-sm">
+                                    <li>
+                                        <a href="#" className="text-gray-600 hover:text-blue-600 dark:text-gray-300 dark:hover:text-blue-400">
+                                            Help Center
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a href="#" className="text-gray-600 hover:text-blue-600 dark:text-gray-300 dark:hover:text-blue-400">
+                                            Documentation
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a href="#" className="text-gray-600 hover:text-blue-600 dark:text-gray-300 dark:hover:text-blue-400">
+                                            Contact Support
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a href="#" className="text-gray-600 hover:text-blue-600 dark:text-gray-300 dark:hover:text-blue-400">
+                                            System Status
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div className="mt-8 border-t border-gray-200 pt-8 dark:border-gray-700">
+                            <div className="flex flex-col items-center justify-between md:flex-row">
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    Built with modern technology for reliable and secure operations.
+                                </p>
+                                <div className="mt-4 flex items-center space-x-4 md:mt-0">
+                                    <span className="text-sm text-gray-500 dark:text-gray-400">Powered by</span>
+                                    <div className="flex items-center space-x-2">
+                                        <div className="fw-bolder h-6 w-8 text-center rounded bg-gradient-to-r from-blue-600 to-purple-600 text-white">UD</div>
+                                        <a
+                                            href="http://uniquedeveloper.in"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center space-x-2"
+                                        >
+                                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Unique Developers</span>
+                                        </a>
                                     </div>
                                 </div>
                             </div>
-
-                            {/* Submit Button */}
-                            <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-700 pt-6">
-                                <button
-                                    type="button"
-                                    onClick={resetForm}
-                                    className="inline-flex items-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-6 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-2 dark:focus:ring-offset-gray-900 focus:outline-none"
-                                >
-                                    <X className="mr-2 h-4 w-4" />
-                                    Reset Form
-                                </button>
-
-                                <button
-                                    type="submit"
-                                    disabled={isSubmitting}
-                                    className="inline-flex items-center rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-500 dark:to-purple-500 px-8 py-3 text-sm font-medium text-white transition-all duration-200 hover:from-blue-700 hover:to-purple-700 dark:hover:from-blue-600 dark:hover:to-purple-600 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-2 dark:focus:ring-offset-gray-900 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    {isSubmitting ? (
-                                        <>
-                                            <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                                            Submitting...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Save className="mr-2 h-4 w-4" />
-                                            Submit Installation Record
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
-                {/* Footer */}
-                <footer className="mt-12 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 transition-colors duration-300">
-                    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-                        <div className="text-center">
-                            <p className="text-sm text-gray-500 dark:text-gray-400">© 2025 ASK Technologies</p>
-                            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                                Cybernet IT Pvt. Ltd.
-                            </p>
                         </div>
                     </div>
                 </footer>
